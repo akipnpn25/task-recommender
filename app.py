@@ -1311,6 +1311,56 @@ with tasks_tab:
                             ),
                         )
                     )
+                    
+                    # ---------------------
+                    # 締切時刻
+                    # ---------------------
+
+                    has_custom_time = (
+                        deadline_dt.time().replace(
+                            second=0,
+                            microsecond=0,
+                        )
+                        != time(
+                            23,
+                            59,
+                        )
+                    )
+
+                    specify_edit_time = (
+                        st.checkbox(
+                            "締切時刻を指定する",
+                            value=has_custom_time,
+                            key=(
+                                "specify_time_"
+                                f"{task_id}"
+                            ),
+                        )
+                    )
+
+                    if specify_edit_time:
+
+                        edited_deadline_time = (
+                            st.time_input(
+                                "締切時刻",
+                                value=(
+                                    deadline_dt.time()
+                                ),
+                                key=(
+                                    "deadline_time_"
+                                    f"{task_id}"
+                                ),
+                            )
+                        )
+
+                    else:
+
+                        edited_deadline_time = (
+                            time(
+                                23,
+                                59,
+                            )
+                        )
 
                     time_values = list(
                         task_time_options.values()
@@ -1356,14 +1406,11 @@ with tasks_tab:
                     ):
 
                         new_deadline = (
-                            datetime.combine(
-                                edited_date,
-                                time(
-                                    23,
-                                    59,
-                                ),
-                            )
-                        )
+    datetime.combine(
+        edited_date,
+        edited_deadline_time,
+    )
+)
 
                         update_task(
                             task_id,
@@ -1477,54 +1524,81 @@ with add_tab:
         "新しい課題を追加"
     )
 
-    st.caption(
-        "3項目だけで登録できます。"
+    # -------------------------
+    # 1. 課題名
+    # -------------------------
+
+    new_title = st.text_input(
+        "課題名",
+        placeholder=(
+            "例：英語レポート"
+        ),
+        key="new_task_title",
     )
 
-    with st.form(
-        "task_form",
-        clear_on_submit=True,
+    # -------------------------
+    # 2. 締切日
+    # -------------------------
+
+    new_deadline_date = st.date_input(
+        "締切日",
+        value=(
+            datetime.now().date()
+            + timedelta(days=1)
+        ),
+        key="new_deadline_date",
+    )
+
+    # -------------------------
+    # 3. 締切時刻
+    # -------------------------
+
+    specify_deadline_time = st.checkbox(
+        "⏰ 締切時刻を指定する",
+        key="specify_deadline_time",
+    )
+
+    if specify_deadline_time:
+
+        new_deadline_time = st.time_input(
+            "締切時刻",
+            value=time(
+                23,
+                59,
+            ),
+            key="new_deadline_time",
+        )
+
+    else:
+
+        # 指定しなければ23:59
+        new_deadline_time = time(
+            23,
+            59,
+        )
+
+    # -------------------------
+    # 4. 予想所要時間
+    # -------------------------
+
+    new_estimated_label = st.selectbox(
+        "だいたいどれくらいかかりそう？",
+        list(
+            task_time_options.keys()
+        ),
+        index=3,
+        key="new_estimated_time",
+    )
+
+    # -------------------------
+    # 追加ボタン
+    # -------------------------
+
+    if st.button(
+        "課題を追加する",
+        use_container_width=True,
+        key="add_task_button",
     ):
-
-        new_title = (
-            st.text_input(
-                "課題名",
-                placeholder=(
-                    "例：推薦システム最終課題"
-                ),
-            )
-        )
-
-        new_deadline_date = (
-            st.date_input(
-                "締切日",
-                value=(
-                    datetime.now().date()
-                    + timedelta(
-                        days=1
-                    )
-                ),
-            )
-        )
-
-        new_estimated_label = (
-            st.selectbox(
-                "だいたいどれくらいかかりそう？",
-                list(
-                    task_time_options.keys()
-                ),
-                index=3,
-            )
-        )
-
-        submitted = (
-            st.form_submit_button(
-                "課題を追加する",
-                use_container_width=True,
-            )
-        )
-
-    if submitted:
 
         if not new_title.strip():
 
@@ -1534,14 +1608,9 @@ with add_tab:
 
         else:
 
-            deadline = (
-                datetime.combine(
-                    new_deadline_date,
-                    time(
-                        23,
-                        59,
-                    ),
-                )
+            deadline = datetime.combine(
+                new_deadline_date,
+                new_deadline_time,
             )
 
             add_task(
