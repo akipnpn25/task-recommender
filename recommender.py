@@ -322,7 +322,6 @@ def get_schedule_summary(
 # =====================================
 # 推薦スコア
 # =====================================
-
 def calculate_score(
     task,
     all_tasks,
@@ -331,37 +330,29 @@ def calculate_score(
     date_overrides=None,
     schedule_summary=None,
 ):
-    metrics = (
-        get_task_metrics(
-            task,
+    metrics = get_task_metrics(
+        task,
+        all_tasks,
+        current_available_minutes,
+        weekly_available_minutes,
+        date_overrides,
+    )
+
+    if schedule_summary is None:
+
+        schedule_summary = get_schedule_summary(
             all_tasks,
             current_available_minutes,
             weekly_available_minutes,
             date_overrides,
         )
-    )
-
-    if schedule_summary is None:
-
-        schedule_summary = (
-            get_schedule_summary(
-                all_tasks,
-                current_available_minutes,
-                weekly_available_minutes,
-                date_overrides,
-            )
-        )
 
     remaining_hours = (
-        metrics[
-            "remaining_hours"
-        ]
+        metrics["remaining_hours"]
     )
 
-    workload_ratio = (
-        metrics[
-            "workload_ratio"
-        ]
+    available_minutes = (
+        metrics["available_minutes"]
     )
 
     task_remaining_minutes = (
@@ -369,6 +360,166 @@ def calculate_score(
             "task_remaining_minutes"
         ]
     )
+
+    # =====================================
+    # 締切超過
+    # =====================================
+
+    if remaining_hours <= 0:
+
+        return {
+            "total": 100,
+            "urgency": 30,
+            "risk": 50,
+            "fit": 20,
+        }
+
+    # =====================================
+    # 1. 締切の近さ
+    # 最大30点
+    # =====================================
+
+    one_week_hours = (
+        24 * 7
+    )
+
+    urgency_score = max(
+        0,
+        1
+        - remaining_hours
+        / one_week_hours,
+    ) * 30
+
+    # =====================================
+    # 個別課題の負荷率
+    # =====================================
+
+    if available_minutes > 0:
+
+        individual_workload_ratio = (
+            task_remaining_minutes
+            / available_minutes
+        )
+
+    elif task_remaining_minutes > 0:
+
+        individual_workload_ratio = (
+            float("inf")
+        )
+
+    else:
+
+        individual_workload_ratio = 0
+
+    # =====================================
+    # 2. 時間不足リスク
+    # 最大50点
+    # =====================================
+
+    first_shortage = (
+        schedule_summary[
+            "first_shortage"
+        ]
+    )
+
+    if first_shortage is not None:
+
+        first_shortage_dt = (
+            datetime.fromisoformat(
+                first_shortage[
+                    "deadline"
+                ]
+            )
+        )
+
+        task_deadline_dt = (
+            datetime.fromisoformat(
+                task[2]
+            )
+        )
+
+        # 最初に予定が破綻する締切までに
+        # 終える必要がある課題は高リスク
+        if (
+            task_deadline_dt
+            <= first_shortage_dt
+        ):
+
+            risk_score = 50
+
+        else:
+
+            # 破綻地点より後の課題は
+            # その課題自身の負荷で評価
+            risk_score = (
+                min(
+                    individual_workload_ratio,
+                    1,
+                )
+                * 25
+            )
+
+    else:
+
+        # 予定全体が間に合う場合は、
+        # 累計課題量ではなく
+        # その課題自身の残り作業量で評価
+        risk_score = (
+            min(
+                individual_workload_ratio,
+                1,
+            )
+            * 50
+        )
+
+    # =====================================
+    # 3. 今の空き時間との相性
+    # 最大20点
+    # =====================================
+
+    if task_remaining_minutes > 0:
+
+        fit_ratio = min(
+            current_available_minutes
+            / task_remaining_minutes,
+            1,
+        )
+
+    else:
+
+        fit_ratio = 1
+
+    fit_score = (
+        fit_ratio * 20
+    )
+
+    # =====================================
+    # 合計
+    # =====================================
+
+    total_score = (
+        urgency_score
+        + risk_score
+        + fit_score
+    )
+
+    return {
+        "total": round(
+            min(
+                total_score,
+                100,
+            )
+        ),
+        "urgency": round(
+            urgency_score
+        ),
+        "risk": round(
+            risk_score
+        ),
+        "fit": round(
+            fit_score
+        ),
+    }
 
     # -------------------------
     # 締切超過
