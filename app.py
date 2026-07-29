@@ -484,6 +484,7 @@ with st.sidebar:
 
 tasks = get_tasks()
 
+
 task_time_options = {
     "15分": 15,
     "30分": 30,
@@ -494,7 +495,8 @@ task_time_options = {
     "3時間": 180,
     "4時間": 240,
     "5時間": 300,
-    "6時間以上": 360,
+    "6時間": 360,
+    "その他": None,
 }
 
 
@@ -1389,23 +1391,30 @@ with tasks_tab:
                     # 4. 予想所要時間
                     # -------------------------
 
-                    time_values = list(
-                        task_time_options.values()
-                    )
+                    # 現在の時間が
+                    # プリセットにあるか確認
+                    matching_label = "その他"
 
-                    nearest_minutes = (
-                        min(
-                            time_values,
-                            key=lambda value: abs(
-                                value
-                                - estimated_minutes
-                            ),
-                        )
+                    for (
+                        label,
+                        minutes,
+                    ) in task_time_options.items():
+
+                        if (
+                            minutes
+                            == estimated_minutes
+                        ):
+
+                            matching_label = label
+                            break
+
+                    option_labels = list(
+                        task_time_options.keys()
                     )
 
                     default_time_index = (
-                        time_values.index(
-                            nearest_minutes
+                        option_labels.index(
+                            matching_label
                         )
                     )
 
@@ -1413,9 +1422,7 @@ with tasks_tab:
                         st.selectbox(
                             "だいたいどれくらい"
                             "かかりそう？",
-                            list(
-                                task_time_options.keys()
-                            ),
+                            option_labels,
                             index=(
                                 default_time_index
                             ),
@@ -1425,6 +1432,128 @@ with tasks_tab:
                             ),
                         )
                     )
+
+                    # -------------------------
+                    # その他
+                    # -------------------------
+
+                    if (
+                        edited_time_label
+                        == "その他"
+                    ):
+
+                        st.write(
+                            "予想所要時間"
+                        )
+
+                        (
+                            duration_hour_col,
+                            duration_minute_col,
+                        ) = st.columns(2)
+
+                        default_hours = (
+                            estimated_minutes
+                            // 60
+                        )
+
+                        default_minutes = (
+                            estimated_minutes
+                            % 60
+                        )
+
+                        hour_options = list(
+                            range(
+                                0,
+                                max(
+                                    25,
+                                    default_hours + 1,
+                                ),
+                            )
+                        )
+
+                        with duration_hour_col:
+
+                            edited_hours = (
+                                st.selectbox(
+                                    "時間",
+                                    options=(
+                                        hour_options
+                                    ),
+                                    index=(
+                                        hour_options.index(
+                                            default_hours
+                                        )
+                                    ),
+                                    key=(
+                                        "duration_hour_"
+                                        f"{task_id}"
+                                    ),
+                                    format_func=(
+                                        lambda x:
+                                        f"{x}時間"
+                                    ),
+                                )
+                            )
+
+                        with duration_minute_col:
+
+                            duration_minute_options = [
+                                0,
+                                15,
+                                30,
+                                45,
+                            ]
+
+                            # 過去データが
+                            # 15分単位でなくても対応
+                            if (
+                                default_minutes
+                                not in
+                                duration_minute_options
+                            ):
+
+                                duration_minute_options.append(
+                                    default_minutes
+                                )
+
+                                duration_minute_options.sort()
+
+                            minute_index = (
+                                duration_minute_options.index(
+                                    default_minutes
+                                )
+                            )
+
+                            edited_minutes = (
+                                st.selectbox(
+                                    "分",
+                                    options=(
+                                        duration_minute_options
+                                    ),
+                                    index=minute_index,
+                                    key=(
+                                        "duration_minute_"
+                                        f"{task_id}"
+                                    ),
+                                    format_func=(
+                                        lambda x:
+                                        f"{x}分"
+                                    ),
+                                )
+                            )
+
+                        edited_estimated_minutes = (
+                            edited_hours * 60
+                            + edited_minutes
+                        )
+
+                    else:
+
+                        edited_estimated_minutes = (
+                            task_time_options[
+                                edited_time_label
+                            ]
+                        )
 
                     # -------------------------
                     # 5. 変更を保存
@@ -1465,9 +1594,7 @@ with tasks_tab:
                                     new_deadline.isoformat()
                                 ),
                                 estimated_minutes=(
-                                    task_time_options[
-                                        edited_time_label
-                                    ]
+                                    edited_estimated_minutes
                                 ),
                             )
 
@@ -1705,22 +1832,72 @@ with add_tab:
                 59,
             )
         )
-
     # -------------------------
     # 4. 予想所要時間
     # -------------------------
 
-    new_estimated_label = (
-        st.selectbox(
-            "だいたいどれくらい"
-            "かかりそう？",
-            list(
-                task_time_options.keys()
-            ),
-            index=3,
-            key="new_estimated_time",
-        )
+    new_estimated_label = st.selectbox(
+        "だいたいどれくらいかかりそう？",
+        list(
+            task_time_options.keys()
+        ),
+        index=3,
+        key="new_estimated_time",
     )
+
+    # 「その他」を選んだ場合だけ
+    # 時間と分を細かく指定
+    if new_estimated_label == "その他":
+
+        st.write(
+            "予想所要時間"
+        )
+
+        duration_hour_col, duration_minute_col = (
+            st.columns(2)
+        )
+
+        with duration_hour_col:
+
+            custom_hours = st.selectbox(
+                "時間",
+                options=list(
+                    range(0, 25)
+                ),
+                index=6,
+                key="new_custom_hours",
+                format_func=lambda x: f"{x}時間",
+            )
+
+        with duration_minute_col:
+
+            duration_minute_options = [
+                0,
+                15,
+                30,
+                45,
+            ]
+
+            custom_minutes = st.selectbox(
+                "分",
+                options=duration_minute_options,
+                index=0,
+                key="new_custom_minutes",
+                format_func=lambda x: f"{x}分",
+            )
+
+        new_estimated_minutes = (
+            custom_hours * 60
+            + custom_minutes
+        )
+
+    else:
+
+        new_estimated_minutes = (
+            task_time_options[
+                new_estimated_label
+            ]
+        )
 
     # -------------------------
     # 5. 課題追加
@@ -1733,10 +1910,13 @@ with add_tab:
     ):
 
         if not new_title.strip():
-
             st.error(
-                "課題名を入力してください。"
-            )
+        "課題名を入力してください。"
+    )
+        elif new_estimated_minutes <= 0:
+            st.error(
+        "予想所要時間を設定してください。"
+    )
 
         else:
 
@@ -1748,12 +1928,10 @@ with add_tab:
             )
 
             add_task(
-                new_title.strip(),
-                deadline.isoformat(),
-                task_time_options[
-                    new_estimated_label
-                ],
-            )
+    new_title.strip(),
+    deadline.isoformat(),
+    new_estimated_minutes,
+)
 
             st.session_state[
                 "message"
