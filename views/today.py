@@ -393,14 +393,37 @@ def render_today(
             "task_remaining_minutes"
         ]
     )
-
-    st.markdown(
+    with st.container(
+    border=True
+):
+        st.markdown(
         f"## 🥇 {status_title}"
     )
 
-    st.success(
-        f"### {best_title}"
-    )
+    st.markdown(
+    f"""
+    <div style="
+        background: #FFFDF9;
+        border: 1px solid #CDB9A7;
+        border-left: 6px solid #8C745F;
+        border-radius: 16px;
+        padding: 18px 20px;
+        margin: 10px 0 16px 0;
+        box-shadow:
+            0 3px 12px
+            rgba(83, 64, 48, 0.06);
+    ">
+        <div style="
+            font-size: 21px;
+            font-weight: 700;
+            color: #403832;
+        ">
+            {best_title}
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
     st.caption(
         "📅 締切："
@@ -445,14 +468,17 @@ def render_today(
     # =====================================
     # 締切までの見通し
     # =====================================
-
-    st.write(
-        "**締切までの見通し**"
-    )
-
+    st.markdown(
+    """
+    <div class="section-title">
+        締切までの見通し
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
     col1, col2, col3 = (
-        st.columns(3)
-    )
+    st.columns(3)
+)
 
     with col1:
         st.metric(
@@ -492,21 +518,26 @@ def render_today(
         "それ以前が締切の課題の"
         "残り作業時間の合計です。"
     )
-
     # =====================================
     # おすすめ理由
     # =====================================
 
-    st.write(
-        "**おすすめ理由**"
+    reason_html = "".join(
+        f'<div class="reason-item">・{reason}</div>'
+        for reason in best["reasons"]
     )
 
-    for reason in best[
-        "reasons"
-    ]:
-        st.write(
-            f"・{reason}"
-        )
+    st.markdown(
+        (
+            '<div class="reason-box">'
+            '<div class="reason-title">'
+            '🌿 おすすめ理由'
+            '</div>'
+            f'{reason_html}'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
 
     # =====================================
     # 推薦スコア
@@ -571,11 +602,17 @@ def render_today(
     # =====================================
     # 1位の進捗更新
     # =====================================
-
     st.divider()
-
-    st.write(
-        "**どのくらい進みましたか？**"
+    with st.container(
+    border=True
+):
+        st.markdown(
+        """
+        <div class="progress-box-title">
+            ☕ どのくらい進みましたか？
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     progress_options = {
