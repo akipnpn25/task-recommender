@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 
 # =====================================
@@ -1025,3 +1025,150 @@ def recommend_tasks(
     )
 
     return results
+
+def get_weekly_outlook(
+    tasks,
+    current_available_minutes,
+    weekly_available_minutes,
+    date_overrides=None,
+    days=7,
+):
+    """
+    今日から指定日数分の
+    作業時間の見通しを計算する
+    """
+
+    if date_overrides is None:
+        date_overrides = {}
+
+    today = datetime.now().date()
+
+    outlook = []
+    first_shortage = None
+
+    for offset in range(days):
+
+        target_date = (
+            today
+            + timedelta(days=offset)
+        )
+
+        # その日の23:59時点で判定
+        checkpoint_dt = (
+            datetime.combine(
+                target_date,
+                time(23, 59, 59),
+            )
+        )
+
+        checkpoint_iso = (
+            checkpoint_dt.isoformat()
+        )
+
+        # -------------------------
+        # その日までに使える時間
+        # -------------------------
+
+        available_minutes = (
+            calculate_available_until(
+                checkpoint_iso,
+                current_available_minutes,
+                weekly_available_minutes,
+                date_overrides,
+            )
+        )
+
+        # -------------------------
+        # その日までに必要な時間
+        # -------------------------
+
+        required_minutes = sum(
+            calculate_remaining_minutes(
+                task
+            )
+            for task in tasks
+            if (
+                datetime.fromisoformat(
+                    task[2]
+                )
+                <= checkpoint_dt
+            )
+        )
+
+        slack_minutes = (
+            available_minutes
+            - required_minutes
+        )
+
+        # -------------------------
+        # 状態判定
+        # -------------------------
+
+        if slack_minutes < 0:
+
+            status = "shortage"
+
+        elif required_minutes == 0:
+
+            status = "safe"
+
+        else:
+
+            if available_minutes > 0:
+
+                workload_ratio = (
+                    required_minutes
+                    / available_minutes
+                )
+
+            else:
+
+                workload_ratio = 0
+
+            # 残り1時間以内、
+            # または使える時間の80%以上を
+            # 使う予定なら注意
+            if (
+                slack_minutes <= 60
+                or workload_ratio >= 0.8
+            ):
+
+                status = "warning"
+
+            else:
+
+                status = "safe"
+
+        day_result = {
+            "date": target_date.isoformat(),
+            "available_minutes": (
+                available_minutes
+            ),
+            "required_minutes": (
+                required_minutes
+            ),
+            "slack_minutes": (
+                slack_minutes
+            ),
+            "status": status,
+        }
+
+        outlook.append(
+            day_result
+        )
+
+        if (
+            first_shortage is None
+            and status == "shortage"
+        ):
+
+            first_shortage = (
+                day_result
+            )
+
+    return {
+        "days": outlook,
+        "first_shortage": (
+            first_shortage
+        ),
+    }

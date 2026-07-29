@@ -1,7 +1,10 @@
 import streamlit as st
 from datetime import datetime
 
-from recommender import recommend_tasks
+from recommender import (
+    recommend_tasks,
+    get_weekly_outlook,
+)
 
 from db import (
     update_progress,
@@ -13,6 +16,246 @@ from components import (
     get_recommendation_status,
     render_progress_popover,
 )
+def render_week_outlook(
+    tasks,
+    current_available_minutes,
+    weekly_available_minutes,
+    date_overrides,
+):
+    """
+    今日から7日間の
+    作業時間の見通しを表示する
+    """
+
+    outlook_summary = (
+        get_weekly_outlook(
+            tasks,
+            current_available_minutes,
+            weekly_available_minutes,
+            date_overrides,
+            days=7,
+        )
+    )
+
+    outlook_days = (
+        outlook_summary[
+            "days"
+        ]
+    )
+
+    first_shortage = (
+        outlook_summary[
+            "first_shortage"
+        ]
+    )
+
+    weekday_names = [
+        "月",
+        "火",
+        "水",
+        "木",
+        "金",
+        "土",
+        "日",
+    ]
+
+    # =====================================
+    # タイトル
+    # =====================================
+    st.markdown(
+    "### 📅 今週の課題全体の見通し"
+)
+    st.caption(
+    "登録している課題すべてをもとに、"
+    "その日までの作業時間に"
+    "余裕があるかを表示しています。"
+)
+    st.caption(
+    "○ 余裕あり　"
+    "△ 少し注意　"
+    "× 時間不足"
+)
+
+    # =====================================
+    # カード用CSS
+    # =====================================
+
+    st.markdown(
+        """
+        <style>
+
+        .week-outlook-grid {
+            display: grid;
+            grid-template-columns:
+                repeat(7, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+            margin-bottom: 16px;
+        }
+
+        .outlook-card {
+            border-radius: 14px;
+            padding: 12px 6px;
+            text-align: center;
+            border: 1px solid
+                rgba(90, 70, 55, 0.08);
+        }
+
+        .outlook-safe {
+            background: #E8EFE5;
+        }
+
+        .outlook-warning {
+            background: #F4E8CC;
+        }
+
+        .outlook-shortage {
+            background: #F0D8D2;
+        }
+
+        .outlook-date {
+            font-size: 13px;
+            color: #6D625A;
+        }
+
+        .outlook-weekday {
+            font-size: 12px;
+            color: #8A7D73;
+        }
+
+        .outlook-symbol {
+            font-size: 26px;
+            font-weight: 600;
+            color: #3D3834;
+            line-height: 1.4;
+        }
+
+        .outlook-label {
+            font-size: 11px;
+            color: #5F5751;
+        }
+
+        @media (
+            max-width: 700px
+        ) {
+            .week-outlook-grid {
+                grid-template-columns:
+                    repeat(4, 1fr);
+            }
+        }
+
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # =====================================
+    # 各日のカード
+    # =====================================
+
+    cards = []
+
+    for day in outlook_days:
+
+        date_object = (
+            datetime.fromisoformat(
+                day["date"]
+            ).date()
+        )
+
+        status = (
+            day["status"]
+        )
+
+        if status == "shortage":
+
+            symbol = "×"
+            label = "時間不足"
+            css_class = (
+                "outlook-shortage"
+            )
+
+        elif status == "warning":
+
+            symbol = "△"
+            label = "少し注意"
+            css_class = (
+                "outlook-warning"
+            )
+
+        else:
+
+            symbol = "○"
+            label = "余裕あり"
+            css_class = (
+                "outlook-safe"
+            )
+
+        weekday = (
+            weekday_names[
+                date_object.weekday()
+            ]
+        )
+        card = (
+            f'<div class="outlook-card {css_class}">'
+            f'<div class="outlook-date">'
+            f'{date_object.strftime("%m/%d")}'
+            f'</div>'
+            f'<div class="outlook-weekday">'
+            f'{weekday}'
+            f'</div>'
+            f'<div class="outlook-symbol">'
+            f'{symbol}'
+            f'</div>'
+            f'<div class="outlook-label">'
+            f'{label}'
+            f'</div>'
+            f'</div>'
+        )
+
+        cards.append(card)
+
+    cards_html = (
+        '<div class="week-outlook-grid">'
+        + "".join(cards)
+        + "</div>"
+    )
+
+    st.markdown(
+        cards_html,
+        unsafe_allow_html=True,
+    )
+
+    # =====================================
+    # 最初の時間不足
+    # =====================================
+
+    if first_shortage is not None:
+
+        shortage_date = (
+            datetime.fromisoformat(
+                first_shortage[
+                    "date"
+                ]
+            ).date()
+        )
+
+        shortage_minutes = abs(
+            first_shortage[
+                "slack_minutes"
+            ]
+        )
+        st.warning(
+        f"⚠️ "
+        f"{shortage_date.strftime('%m/%d')}から"
+        f"約{format_minutes(shortage_minutes)}"
+        "不足する見込みです。"
+    )
+    else:
+        st.success(
+        "🌿 今週は今の予定で"
+        "間に合う見込みです。"
+    )
 
 
 def render_today(
@@ -60,6 +303,18 @@ def render_today(
             "おすすめが表示されます。"
         )
         return
+    # =====================================
+    # 今週の見通し
+    # =====================================
+
+    render_week_outlook(
+        tasks,
+        available_minutes,
+        weekly_available_minutes,
+        date_overrides,
+    )
+
+    st.divider()
 
     # =====================================
     # 推薦
@@ -75,52 +330,6 @@ def render_today(
     top_recommendations = (
         recommendations[:3]
     )
-
-    # =====================================
-    # 全体の時間不足
-    # =====================================
-
-    schedule_summary = (
-        recommendations[0][
-            "schedule_summary"
-        ]
-    )
-
-    first_shortage = (
-        schedule_summary[
-            "first_shortage"
-        ]
-    )
-
-    if first_shortage is not None:
-        shortage_dt = (
-            datetime.fromisoformat(
-                first_shortage[
-                    "deadline"
-                ]
-            )
-        )
-
-        shortage_minutes = abs(
-            first_shortage[
-                "slack_minutes"
-            ]
-        )
-
-        st.warning(
-            "📉 現在の予定では、"
-            f"{shortage_dt.strftime('%m/%d')}の"
-            "締切時点で"
-            f"約{format_minutes(shortage_minutes)}"
-            "不足する見込みです。"
-        )
-
-    else:
-        st.info(
-            "🌿 現在登録されている予定では、"
-            "締切までの作業時間を"
-            "確保できる見込みです。"
-        )
 
     # =====================================
     # 1位
