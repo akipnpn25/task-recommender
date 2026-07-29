@@ -264,10 +264,22 @@ with recommend_tab:
             available_minutes,
             weekly_available_minutes,
         )
+        recommendations = recommend_tasks(
+    tasks,
+    available_minutes,
+    weekly_available_minutes,
+)
 
-        best = recommendations[0]
+# 上位3件だけ取得
+top_recommendations = recommendations[:3]
 
-        (
+# =====================================
+# 1位
+# =====================================
+
+best = top_recommendations[0]
+
+(
     best_task_id,
     best_title,
     best_deadline,
@@ -275,117 +287,123 @@ with recommend_tab:
     best_progress,
 ) = best["task"]
 
-        status_title, status_message = (
-            get_recommendation_status(best)
-        )
+best_deadline_dt = datetime.fromisoformat(
+    best_deadline
+)
 
-        metrics = best["metrics"]
+status_title, status_message = (
+    get_recommendation_status(best)
+)
 
-        available_until_deadline = (
-            metrics["available_minutes"]
-        )
+metrics = best["metrics"]
 
-        required_until_deadline = (
-            metrics["required_minutes"]
-        )
+available_until_deadline = (
+    metrics["available_minutes"]
+)
 
-        slack_minutes = (
-            metrics["slack_minutes"]
-        )
+required_until_deadline = (
+    metrics["required_minutes"]
+)
 
-        st.markdown(
-            f"## {status_title}"
-        )
+slack_minutes = (
+    metrics["slack_minutes"]
+)
 
-        st.success(
-            f"### {best_title}"
-        )
+remaining_minutes = (
+    metrics["task_remaining_minutes"]
+)
 
-        st.write(status_message)
 
-        col1, col2, col3 = st.columns(3)
+st.markdown(
+    f"## 🥇 {status_title}"
+)
 
-        with col1:
-            st.metric(
-                "使える時間",
-                format_minutes(
-                    available_until_deadline
-                ),
-            )
+st.success(
+    f"### {best_title}"
+)
 
-        with col2:
-            st.metric(
-                "必要時間",
-                format_minutes(
-                    required_until_deadline
-                ),
-            )
+st.caption(
+    f"📅 締切："
+    f"{best_deadline_dt.strftime('%m/%d %H:%M')}"
+)
 
-        with col3:
+st.write(status_message)
 
-            if slack_minutes < 0:
 
-                st.metric(
-                    "不足",
-                    format_minutes(
-                        abs(slack_minutes)
-                    ),
-                )
+# =====================================
+# 進捗
+# =====================================
 
-            else:
-
-                st.metric(
-                    "余裕",
-                    format_minutes(
-                        slack_minutes
-                    ),
-                )
-
-        st.caption(
-            "使える時間は、今の空き時間と"
-            "普段の曜日別空き時間から計算しています。"
-        )
-
-        st.write("**おすすめ理由**")
-
-        for reason in best["reasons"]:
-            st.write(
-                f"・{reason}"
-            )
-
-        with st.expander(
-            "推薦の詳細を見る"
-        ):
-
-            st.write(
-                f"おすすめスコア："
-                f"{best['score']} / 100"
-            )
-
-            st.caption(
-                "締切の近さ・時間不足のリスク・"
-                "今の空き時間との相性を使って計算しています。"
-            )
-            st.write("**進捗状況**")
+st.write(
+    f"**現在の進捗：{best_progress}%**"
+)
 
 st.progress(
     best_progress / 100
 )
 
-st.write(
-    f"現在：{best_progress}%"
-)
-
-remaining_minutes = round(
-    best_estimated_minutes
-    * (100 - best_progress)
-    / 100
-)
-
 st.caption(
-    f"残り作業時間の目安："
-    f"{format_minutes(remaining_minutes)}"
+    f"この課題の残り作業時間："
+    f"約{format_minutes(remaining_minutes)}"
 )
+
+
+# =====================================
+# 締切までの見通し
+# =====================================
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "使える時間",
+        format_minutes(
+            available_until_deadline
+        ),
+    )
+
+with col2:
+    st.metric(
+        "必要時間",
+        format_minutes(
+            required_until_deadline
+        ),
+    )
+
+with col3:
+    if slack_minutes < 0:
+        st.metric(
+            "不足",
+            format_minutes(
+                abs(slack_minutes)
+            ),
+        )
+    else:
+        st.metric(
+            "余裕",
+            format_minutes(
+                slack_minutes
+            ),
+        )
+
+
+# =====================================
+# 推薦理由
+# =====================================
+
+st.write(
+    "**この課題をおすすめする理由**"
+)
+
+for reason in best["reasons"]:
+    st.write(
+        f"・{reason}"
+    )
+
+
+# =====================================
+# 進捗をワンタップ更新
+# =====================================
 
 progress_options = {
     "1割": 10,
@@ -401,22 +419,35 @@ progress_options = {
 
 selected_label = st.segmented_control(
     "どのくらい進みましたか？",
-    options=list(progress_options.keys()),
+    options=list(
+        progress_options.keys()
+    ),
     selection_mode="single",
-    key=f"recommend_progress_{best_task_id}",
+    key=(
+        f"recommend_progress_"
+        f"{best_task_id}"
+    ),
     width="stretch",
 )
 
 if selected_label is not None:
-    new_progress = progress_options[selected_label]
+
+    new_progress = (
+        progress_options[
+            selected_label
+        ]
+    )
 
     if new_progress != best_progress:
+
         update_progress(
             best_task_id,
             new_progress,
         )
 
-        st.session_state["message"] = (
+        st.session_state[
+            "message"
+        ] = (
             f"「{best_title}」の進捗を"
             f"{selected_label}に更新しました。"
         )
@@ -426,20 +457,124 @@ if selected_label is not None:
 
 if st.button(
     "✅ 終わった！",
-    key=f"recommend_finish_{best_task_id}",
+    key=(
+        f"recommend_finish_"
+        f"{best_task_id}"
+    ),
     use_container_width=True,
 ):
+
     update_progress(
         best_task_id,
         100,
     )
 
-    st.session_state["message"] = (
+    st.session_state[
+        "message"
+    ] = (
         f"「{best_title}」完了！🎉"
     )
 
     st.rerun()
 
+
+# =====================================
+# 2位・3位
+# =====================================
+
+if len(top_recommendations) >= 2:
+
+    st.divider()
+
+    st.markdown(
+        "### 他のおすすめ"
+    )
+
+    for rank, recommendation in enumerate(
+        top_recommendations[1:],
+        start=2,
+    ):
+
+        (
+            task_id,
+            title,
+            deadline,
+            estimated_minutes,
+            progress,
+        ) = recommendation["task"]
+
+        deadline_dt = datetime.fromisoformat(
+            deadline
+        )
+
+        task_metrics = (
+            recommendation["metrics"]
+        )
+
+        task_remaining = (
+            task_metrics[
+                "task_remaining_minutes"
+            ]
+        )
+
+        task_slack = (
+            task_metrics[
+                "slack_minutes"
+            ]
+        )
+
+        with st.container(
+            border=True
+        ):
+
+            if rank == 2:
+                medal = "🥈"
+            else:
+                medal = "🥉"
+
+            st.markdown(
+                f"#### {medal} {rank}位　{title}"
+            )
+
+            col1, col2, col3 = (
+                st.columns(3)
+            )
+
+            with col1:
+                st.write(
+                    "📅 "
+                    f"{deadline_dt.strftime('%m/%d')}"
+                )
+
+            with col2:
+                st.write(
+                    "⏱️ 残り "
+                    f"{format_minutes(task_remaining)}"
+                )
+
+            with col3:
+                st.write(
+                    f"📈 {progress}%"
+                )
+
+            if task_slack < 0:
+
+                st.warning(
+                    "この締切までに約"
+                    f"{format_minutes(abs(task_slack))}"
+                    "不足する見込みです。"
+                )
+
+            with st.expander(
+                "おすすめ理由を見る"
+            ):
+
+                for reason in (
+                    recommendation["reasons"]
+                ):
+                    st.write(
+                        f"・{reason}"
+                    )
 # =====================================
 # 課題一覧タブ
 # =====================================
