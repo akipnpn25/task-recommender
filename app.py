@@ -403,6 +403,126 @@ with st.container(
     color: #91857B;
     margin-top: 10px;
 }
+/* =====================================
+   集中モード
+===================================== */
+
+.focus-screen {
+    max-width: 650px;
+
+    margin:
+        50px auto 25px auto;
+
+    padding:
+        55px 35px;
+
+    text-align: center;
+
+    background:
+        linear-gradient(
+            145deg,
+            #FFFDF9 0%,
+            #EEE5DA 100%
+        );
+
+    border:
+        1px solid #D3C1B0;
+
+    border-radius:
+        28px;
+
+    box-shadow:
+        0 12px 35px
+        rgba(
+            67,
+            52,
+            40,
+            0.10
+        );
+}
+
+
+.focus-screen-label {
+    display: inline-block;
+
+    padding:
+        6px 13px;
+
+    background:
+        #E5D8CB;
+
+    border-radius:
+        999px;
+
+    color:
+        #755F4F;
+
+    font-size:
+        12px;
+
+    font-weight:
+        700;
+
+    letter-spacing:
+        0.13em;
+
+    margin-bottom:
+        24px;
+}
+
+
+.focus-screen-title {
+    font-size:
+        30px;
+
+    font-weight:
+        750;
+
+    color:
+        #342E2A;
+
+    margin-bottom:
+        25px;
+}
+
+
+.focus-screen-time {
+    font-size:
+        34px;
+
+    font-weight:
+        700;
+
+    color:
+        #493D35;
+
+    margin-bottom:
+        8px;
+}
+
+
+.focus-screen-duration {
+    font-size:
+        15px;
+
+    font-weight:
+        600;
+
+    color:
+        #826E5F;
+
+    margin-bottom:
+        30px;
+}
+
+
+.focus-screen-message {
+    font-size:
+        15px;
+
+    color:
+        #766B63;
+}
 
     </style>
     """,
