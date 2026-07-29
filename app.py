@@ -60,20 +60,26 @@ def get_recommendation_status(
     recommendation
 ):
     metrics = (
-        recommendation["metrics"]
+        recommendation[
+            "metrics"
+        ]
     )
 
     remaining_hours = (
-        metrics["remaining_hours"]
+        metrics[
+            "remaining_hours"
+        ]
     )
 
     slack_minutes = (
-        metrics["slack_minutes"]
+        metrics[
+            "slack_minutes"
+        ]
     )
 
-    score = (
-        recommendation["score"]
-    )
+    # -------------------------
+    # 締切超過
+    # -------------------------
 
     if remaining_hours <= 0:
 
@@ -83,12 +89,59 @@ def get_recommendation_status(
             "優先して取り組みましょう。",
         )
 
+    # -------------------------
+    # 最初の時間不足に関係する課題
+    # -------------------------
+
+    schedule_summary = (
+        recommendation.get(
+            "schedule_summary",
+            {},
+        )
+    )
+
+    first_shortage = (
+        schedule_summary.get(
+            "first_shortage"
+        )
+    )
+
+    if (
+        first_shortage is not None
+        and recommendation.get(
+            "contributes_to_first_shortage",
+            False,
+        )
+    ):
+
+        shortage_dt = (
+            datetime.fromisoformat(
+                first_shortage[
+                    "deadline"
+                ]
+            )
+        )
+
+        return (
+            "🔥 今から進めたい",
+            (
+                f"{shortage_dt.strftime('%m/%d')}の"
+                "締切までに、"
+                f"約{format_minutes(abs(first_shortage['slack_minutes']))}"
+                "不足する見込みです。"
+            ),
+        )
+
+    # -------------------------
+    # その他
+    # -------------------------
+
     if slack_minutes < 0:
 
         return (
             "🔥 今すぐやる",
             (
-                "このままだと約"
+                "この締切までに約"
                 f"{format_minutes(abs(slack_minutes))}"
                 "不足する見込みです。"
             ),
@@ -96,7 +149,9 @@ def get_recommendation_status(
 
     if (
         slack_minutes <= 60
-        or score >= 75
+        or recommendation[
+            "score"
+        ] >= 75
     ):
 
         return (
@@ -109,6 +164,99 @@ def get_recommendation_status(
         "🙂 まだ余裕あり",
         "現時点では比較的余裕があります。",
     )
+
+
+# =====================================
+# 2位・3位用進捗ポップアップ
+# =====================================
+
+def render_progress_popover(
+    task_id,
+    title,
+    progress,
+    key_prefix,
+):
+    progress_options = {
+        "1割": 10,
+        "2割": 20,
+        "3割": 30,
+        "4割": 40,
+        "5割": 50,
+        "6割": 60,
+        "7割": 70,
+        "8割": 80,
+        "9割": 90,
+    }
+
+    with st.popover(
+        "📈 進捗を更新",
+        use_container_width=True,
+    ):
+
+        selected_label = (
+            st.segmented_control(
+                "どのくらい進みましたか？",
+                options=list(
+                    progress_options.keys()
+                ),
+                selection_mode="single",
+                key=(
+                    f"{key_prefix}_"
+                    f"progress_{task_id}"
+                ),
+            )
+        )
+
+        if (
+            selected_label
+            is not None
+        ):
+
+            new_progress = (
+                progress_options[
+                    selected_label
+                ]
+            )
+
+            if (
+                new_progress
+                != progress
+            ):
+
+                update_progress(
+                    task_id,
+                    new_progress,
+                )
+
+                st.session_state[
+                    "message"
+                ] = (
+                    f"「{title}」の進捗を"
+                    f"{selected_label}に更新しました。"
+                )
+
+                st.rerun()
+
+        if st.button(
+            "✅ 終わった！",
+            key=(
+                f"{key_prefix}_"
+                f"finish_{task_id}"
+            ),
+            use_container_width=True,
+        ):
+
+            complete_task(
+                task_id
+            )
+
+            st.session_state[
+                "message"
+            ] = (
+                f"「{title}」完了！🎉"
+            )
+
+            st.rerun()
 
 
 # =====================================
@@ -133,7 +281,7 @@ st.caption(
 
 
 # =====================================
-# メッセージ
+# 操作後メッセージ
 # =====================================
 
 if "message" in st.session_state:
@@ -290,7 +438,9 @@ with st.sidebar:
                 min_value=tomorrow,
                 max_value=(
                     datetime.now().date()
-                    + timedelta(days=7)
+                    + timedelta(
+                        days=7
+                    )
                 ),
                 key="override_date",
             )
@@ -328,8 +478,35 @@ with st.sidebar:
 
             st.rerun()
 
-        # 登録済み例外
-        if date_overrides:
+        future_overrides = []
+
+        for (
+            date_string,
+            minutes,
+        ) in sorted(
+            date_overrides.items()
+        ):
+
+            date_object = (
+                datetime.fromisoformat(
+                    date_string
+                ).date()
+            )
+
+            if (
+                date_object
+                >= datetime.now().date()
+            ):
+
+                future_overrides.append(
+                    (
+                        date_string,
+                        date_object,
+                        minutes,
+                    )
+                )
+
+        if future_overrides:
 
             st.divider()
 
@@ -337,26 +514,11 @@ with st.sidebar:
                 "変更済み"
             )
 
-            today = (
-                datetime.now().date()
-            )
-
             for (
-                override_date_string,
+                date_string,
+                date_object,
                 minutes,
-            ) in sorted(
-                date_overrides.items()
-            ):
-
-                date_object = (
-                    datetime.fromisoformat(
-                        override_date_string
-                    ).date()
-                )
-
-                # 過去の設定は表示しない
-                if date_object < today:
-                    continue
+            ) in future_overrides:
 
                 col1, col2 = (
                     st.columns(
@@ -377,12 +539,12 @@ with st.sidebar:
                         "戻す",
                         key=(
                             "remove_override_"
-                            f"{override_date_string}"
+                            f"{date_string}"
                         ),
                     ):
 
                         delete_date_override(
-                            override_date_string
+                            date_string
                         )
 
                         st.rerun()
@@ -402,7 +564,9 @@ task_time_options = {
     "1時間30分": 90,
     "2時間": 120,
     "3時間": 180,
-    "4時間以上": 240,
+    "4時間": 240,
+    "5時間": 300,
+    "6時間以上": 360,
 }
 
 
@@ -422,7 +586,7 @@ recommend_tab, tasks_tab, add_tab = (
 
 
 # =====================================
-# おすすめ
+# おすすめタブ
 # =====================================
 
 with recommend_tab:
@@ -481,12 +645,58 @@ with recommend_tab:
             recommendations[:3]
         )
 
+        # -------------------------
+        # 全体の時間不足
+        # -------------------------
+
+        schedule_summary = (
+            recommendations[
+                0
+            ][
+                "schedule_summary"
+            ]
+        )
+
+        first_shortage = (
+            schedule_summary[
+                "first_shortage"
+            ]
+        )
+
+        if first_shortage is not None:
+
+            shortage_dt = (
+                datetime.fromisoformat(
+                    first_shortage[
+                        "deadline"
+                    ]
+                )
+            )
+
+            st.warning(
+                "📉 現在の予定では、"
+                f"{shortage_dt.strftime('%m/%d')}の"
+                "締切時点で"
+                f"約{format_minutes(abs(first_shortage['slack_minutes']))}"
+                "不足する見込みです。"
+            )
+
+        else:
+
+            st.info(
+                "✅ 現在登録されている予定では、"
+                "締切までの作業時間を"
+                "確保できる見込みです。"
+            )
+
         # =========================
         # 1位
         # =========================
 
         best = (
-            top_recommendations[0]
+            top_recommendations[
+                0
+            ]
         )
 
         (
@@ -510,7 +720,9 @@ with recommend_tab:
         )
 
         metrics = (
-            best["metrics"]
+            best[
+                "metrics"
+            ]
         )
 
         remaining_hours = (
@@ -595,7 +807,7 @@ with recommend_tab:
         )
 
         # -------------------------
-        # 見通し
+        # 締切までの見通し
         # -------------------------
 
         st.write(
@@ -653,7 +865,7 @@ with recommend_tab:
         )
 
         # -------------------------
-        # 理由
+        # 推薦理由
         # -------------------------
 
         st.write(
@@ -661,7 +873,9 @@ with recommend_tab:
         )
 
         for reason in (
-            best["reasons"]
+            best[
+                "reasons"
+            ]
         ):
 
             st.write(
@@ -669,7 +883,7 @@ with recommend_tab:
             )
 
         # -------------------------
-        # スコア詳細
+        # 推薦スコア
         # -------------------------
 
         with st.expander(
@@ -730,7 +944,7 @@ with recommend_tab:
             )
 
         # -------------------------
-        # 進捗更新
+        # 1位の進捗更新
         # -------------------------
 
         st.divider()
@@ -793,7 +1007,7 @@ with recommend_tab:
                 st.session_state[
                     "message"
                 ] = (
-                    f"「{best_title}」を"
+                    f"「{best_title}」の進捗を"
                     f"{selected_label}に更新しました。"
                 )
 
@@ -930,6 +1144,23 @@ with recommend_tab:
                             "不足する見込みです。"
                         )
 
+                    # -----------------
+                    # コンパクトな進捗更新
+                    # -----------------
+
+                    render_progress_popover(
+                        task_id,
+                        title,
+                        progress,
+                        key_prefix=(
+                            f"rank_{rank}"
+                        ),
+                    )
+
+                    # -----------------
+                    # 理由
+                    # -----------------
+
                     with st.expander(
                         "おすすめ理由"
                     ):
@@ -1047,7 +1278,8 @@ with tasks_tab:
                     st.session_state[
                         "message"
                     ] = (
-                        f"「{title}」を完了にしました！"
+                        f"「{title}」を"
+                        "完了にしました！"
                     )
 
                     st.rerun()
@@ -1084,15 +1316,12 @@ with tasks_tab:
                         task_time_options.values()
                     )
 
-                    nearest_minutes = (
-                        min(
-                            time_values,
-                            key=lambda value:
-                            abs(
-                                value
-                                - estimated_minutes
-                            ),
-                        )
+                    nearest_minutes = min(
+                        time_values,
+                        key=lambda value: abs(
+                            value
+                            - estimated_minutes
+                        ),
                     )
 
                     default_index = (
@@ -1107,7 +1336,9 @@ with tasks_tab:
                             list(
                                 task_time_options.keys()
                             ),
-                            index=default_index,
+                            index=(
+                                default_index
+                            ),
                             key=(
                                 f"time_"
                                 f"{task_id}"
@@ -1269,7 +1500,9 @@ with add_tab:
                 "締切日",
                 value=(
                     datetime.now().date()
-                    + timedelta(days=1)
+                    + timedelta(
+                        days=1
+                    )
                 ),
             )
         )
@@ -1322,7 +1555,8 @@ with add_tab:
             st.session_state[
                 "message"
             ] = (
-                f"「{new_title}」を追加しました！"
+                f"「{new_title}」を"
+                "追加しました！"
             )
 
             st.rerun()

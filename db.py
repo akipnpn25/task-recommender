@@ -29,7 +29,7 @@ def get_connection():
 
 
 # =====================================
-# 初期化
+# DB初期化
 # =====================================
 
 def init_db():
@@ -37,7 +37,7 @@ def init_db():
     cursor = conn.cursor()
 
     # -------------------------
-    # 課題テーブル
+    # 課題
     # -------------------------
 
     cursor.execute(
@@ -67,7 +67,8 @@ def init_db():
         cursor.execute(
             """
             ALTER TABLE tasks
-            ADD COLUMN progress INTEGER NOT NULL DEFAULT 0
+            ADD COLUMN progress
+            INTEGER NOT NULL DEFAULT 0
             """
         )
 
@@ -75,12 +76,13 @@ def init_db():
         cursor.execute(
             """
             ALTER TABLE tasks
-            ADD COLUMN completed INTEGER NOT NULL DEFAULT 0
+            ADD COLUMN completed
+            INTEGER NOT NULL DEFAULT 0
             """
         )
 
     # -------------------------
-    # 曜日別空き時間
+    # 曜日ごとの空き時間
     # -------------------------
 
     cursor.execute(
@@ -92,7 +94,9 @@ def init_db():
         """
     )
 
-    for weekday, minutes in DEFAULT_WEEKLY_SETTINGS.items():
+    for weekday, minutes in (
+        DEFAULT_WEEKLY_SETTINGS.items()
+    ):
         cursor.execute(
             """
             INSERT OR IGNORE INTO weekly_settings (
@@ -301,15 +305,13 @@ def complete_task(task_id):
 
 
 # =====================================
-# 完了を戻す
+# 完了を取り消す
 # =====================================
 
 def restore_task(task_id):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 誤って完了した場合を想定し、
-    # 100% → 90% に戻す
     cursor.execute(
         """
         UPDATE tasks
@@ -350,7 +352,7 @@ def delete_task(task_id):
 
 
 # =====================================
-# 曜日別空き時間
+# 曜日ごとの空き時間
 # =====================================
 
 def get_weekly_settings():
@@ -380,7 +382,9 @@ def save_weekly_settings(settings):
     conn = get_connection()
     cursor = conn.cursor()
 
-    for weekday, minutes in settings.items():
+    for weekday, minutes in (
+        settings.items()
+    ):
         cursor.execute(
             """
             INSERT INTO weekly_settings (
