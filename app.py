@@ -1,5 +1,4 @@
 import streamlit as st
-
 from datetime import datetime, time, timedelta
 
 from recommender import recommend_tasks
@@ -27,83 +26,39 @@ from db import (
 # =====================================
 
 def format_minutes(minutes):
-    minutes = max(
-        0,
-        round(minutes),
-    )
-
-    hours = (
-        minutes // 60
-    )
-
-    remaining_minutes = (
-        minutes % 60
-    )
+    """分を「○時間○分」に変換する"""
+    minutes = max(0, round(minutes))
+    hours = minutes // 60
+    remaining_minutes = minutes % 60
 
     if hours == 0:
-        return (
-            f"{remaining_minutes}分"
-        )
+        return f"{remaining_minutes}分"
 
     if remaining_minutes == 0:
-        return (
-            f"{hours}時間"
-        )
+        return f"{hours}時間"
 
-    return (
-        f"{hours}時間"
-        f"{remaining_minutes}分"
-    )
+    return f"{hours}時間{remaining_minutes}分"
 
 
-def get_recommendation_status(
-    recommendation
-):
-    metrics = (
-        recommendation[
-            "metrics"
-        ]
-    )
-
-    remaining_hours = (
-        metrics[
-            "remaining_hours"
-        ]
-    )
-
-    slack_minutes = (
-        metrics[
-            "slack_minutes"
-        ]
-    )
-
-    # -------------------------
-    # 締切超過
-    # -------------------------
+def get_recommendation_status(recommendation):
+    """推薦結果を分かりやすい状態に変換する"""
+    metrics = recommendation["metrics"]
+    remaining_hours = metrics["remaining_hours"]
+    slack_minutes = metrics["slack_minutes"]
 
     if remaining_hours <= 0:
-
         return (
             "🚨 締切超過",
-            "締切を過ぎています。"
-            "優先して取り組みましょう。",
+            "締切を過ぎています。優先して取り組みましょう。",
         )
 
-    # -------------------------
-    # 最初の時間不足に関係する課題
-    # -------------------------
-
-    schedule_summary = (
-        recommendation.get(
-            "schedule_summary",
-            {},
-        )
+    schedule_summary = recommendation.get(
+        "schedule_summary",
+        {},
     )
 
-    first_shortage = (
-        schedule_summary.get(
-            "first_shortage"
-        )
+    first_shortage = schedule_summary.get(
+        "first_shortage"
     )
 
     if (
@@ -113,31 +68,20 @@ def get_recommendation_status(
             False,
         )
     ):
-
-        shortage_dt = (
-            datetime.fromisoformat(
-                first_shortage[
-                    "deadline"
-                ]
-            )
+        shortage_dt = datetime.fromisoformat(
+            first_shortage["deadline"]
         )
 
         return (
             "🔥 今から進めたい",
             (
-                f"{shortage_dt.strftime('%m/%d')}の"
-                "締切までに、"
+                f"{shortage_dt.strftime('%m/%d')}の締切までに、"
                 f"約{format_minutes(abs(first_shortage['slack_minutes']))}"
                 "不足する見込みです。"
             ),
         )
 
-    # -------------------------
-    # その他
-    # -------------------------
-
     if slack_minutes < 0:
-
         return (
             "🔥 今すぐやる",
             (
@@ -149,15 +93,11 @@ def get_recommendation_status(
 
     if (
         slack_minutes <= 60
-        or recommendation[
-            "score"
-        ] >= 75
+        or recommendation["score"] >= 75
     ):
-
         return (
             "⚠️ そろそろやる",
-            "締切までの余裕が"
-            "少なくなっています。",
+            "締切までの余裕が少なくなっています。",
         )
 
     return (
@@ -166,16 +106,14 @@ def get_recommendation_status(
     )
 
 
-# =====================================
-# 2位・3位用進捗ポップアップ
-# =====================================
-
 def render_progress_popover(
     task_id,
     title,
     progress,
     key_prefix,
 ):
+    """2位・3位用のコンパクトな進捗更新UI"""
+
     progress_options = {
         "1割": 10,
         "2割": 20,
@@ -193,24 +131,19 @@ def render_progress_popover(
         use_container_width=True,
     ):
 
-        selected_label = (
-            st.segmented_control(
-                "どのくらい進みましたか？",
-                options=list(
-                    progress_options.keys()
-                ),
-                selection_mode="single",
-                key=(
-                    f"{key_prefix}_"
-                    f"progress_{task_id}"
-                ),
-            )
+        selected_label = st.segmented_control(
+            "どのくらい進みましたか？",
+            options=list(
+                progress_options.keys()
+            ),
+            selection_mode="single",
+            key=(
+                f"{key_prefix}_"
+                f"progress_{task_id}"
+            ),
         )
 
-        if (
-            selected_label
-            is not None
-        ):
+        if selected_label is not None:
 
             new_progress = (
                 progress_options[
@@ -218,10 +151,7 @@ def render_progress_popover(
                 ]
             )
 
-            if (
-                new_progress
-                != progress
-            ):
+            if new_progress != progress:
 
                 update_progress(
                     task_id,
@@ -438,9 +368,7 @@ with st.sidebar:
                 min_value=tomorrow,
                 max_value=(
                     datetime.now().date()
-                    + timedelta(
-                        days=7
-                    )
+                    + timedelta(days=7)
                 ),
                 key="override_date",
             )
@@ -1120,7 +1048,7 @@ with recommend_tab:
 
                         st.write(
                             "📅 "
-                            f"{deadline_dt.strftime('%m/%d')}"
+                            f"{deadline_dt.strftime('%m/%d %H:%M')}"
                         )
 
                     with col2:
@@ -1144,10 +1072,6 @@ with recommend_tab:
                             "不足する見込みです。"
                         )
 
-                    # -----------------
-                    # コンパクトな進捗更新
-                    # -----------------
-
                     render_progress_popover(
                         task_id,
                         title,
@@ -1156,10 +1080,6 @@ with recommend_tab:
                             f"rank_{rank}"
                         ),
                     )
-
-                    # -----------------
-                    # 理由
-                    # -----------------
 
                     with st.expander(
                         "おすすめ理由"
@@ -1183,7 +1103,7 @@ with recommend_tab:
 
 
 # =====================================
-# 課題一覧
+# 課題一覧タブ
 # =====================================
 
 with tasks_tab:
@@ -1244,7 +1164,8 @@ with tasks_tab:
 
                     st.write(
                         "📅 "
-                        f"{deadline_dt.strftime('%m/%d')}まで"
+                        f"{deadline_dt.strftime('%m/%d %H:%M')}"
+                        "まで"
                     )
 
                 with col2:
@@ -1261,6 +1182,10 @@ with tasks_tab:
                 st.progress(
                     progress / 100
                 )
+
+                # -------------------------
+                # 完了
+                # -------------------------
 
                 if st.button(
                     "✅ 完了",
@@ -1284,9 +1209,17 @@ with tasks_tab:
 
                     st.rerun()
 
+                # -------------------------
+                # 編集
+                # -------------------------
+
                 with st.expander(
                     "✏️ 編集"
                 ):
+
+                    # -------------------------
+                    # 1. 課題名
+                    # -------------------------
 
                     edited_title = (
                         st.text_input(
@@ -1298,6 +1231,10 @@ with tasks_tab:
                             ),
                         )
                     )
+
+                    # -------------------------
+                    # 2. 締切日
+                    # -------------------------
 
                     edited_date = (
                         st.date_input(
@@ -1311,16 +1248,20 @@ with tasks_tab:
                             ),
                         )
                     )
-                    
-                    # ---------------------
-                    # 締切時刻
-                    # ---------------------
 
-                    has_custom_time = (
+                    # -------------------------
+                    # 3. 締切時刻
+                    # -------------------------
+
+                    current_time = (
                         deadline_dt.time().replace(
                             second=0,
                             microsecond=0,
                         )
+                    )
+
+                    has_custom_time = (
+                        current_time
                         != time(
                             23,
                             59,
@@ -1329,8 +1270,10 @@ with tasks_tab:
 
                     specify_edit_time = (
                         st.checkbox(
-                            "締切時刻を指定する",
-                            value=has_custom_time,
+                            "⏰ 締切時刻を指定する",
+                            value=(
+                                has_custom_time
+                            ),
                             key=(
                                 "specify_time_"
                                 f"{task_id}"
@@ -1340,16 +1283,96 @@ with tasks_tab:
 
                     if specify_edit_time:
 
+                        st.write(
+                            "締切時刻"
+                        )
+
+                        (
+                            hour_col,
+                            minute_col,
+                        ) = st.columns(2)
+
+                        with hour_col:
+
+                            deadline_hour = (
+                                st.selectbox(
+                                    "時",
+                                    options=list(
+                                        range(24)
+                                    ),
+                                    index=(
+                                        current_time.hour
+                                    ),
+                                    key=(
+                                        "deadline_hour_"
+                                        f"{task_id}"
+                                    ),
+                                    format_func=(
+                                        lambda x:
+                                        f"{x:02d}時"
+                                    ),
+                                )
+                            )
+
+                        with minute_col:
+
+                            minute_options = [
+                                0,
+                                5,
+                                10,
+                                15,
+                                20,
+                                25,
+                                30,
+                                35,
+                                40,
+                                45,
+                                50,
+                                55,
+                                59,
+                            ]
+
+                            if (
+                                current_time.minute
+                                not in minute_options
+                            ):
+
+                                minute_options.append(
+                                    current_time.minute
+                                )
+
+                                minute_options.sort()
+
+                            minute_index = (
+                                minute_options.index(
+                                    current_time.minute
+                                )
+                            )
+
+                            deadline_minute = (
+                                st.selectbox(
+                                    "分",
+                                    options=(
+                                        minute_options
+                                    ),
+                                    index=(
+                                        minute_index
+                                    ),
+                                    key=(
+                                        "deadline_minute_"
+                                        f"{task_id}"
+                                    ),
+                                    format_func=(
+                                        lambda x:
+                                        f"{x:02d}分"
+                                    ),
+                                )
+                            )
+
                         edited_deadline_time = (
-                            st.time_input(
-                                "締切時刻",
-                                value=(
-                                    deadline_dt.time()
-                                ),
-                                key=(
-                                    "deadline_time_"
-                                    f"{task_id}"
-                                ),
+                            time(
+                                deadline_hour,
+                                deadline_minute,
                             )
                         )
 
@@ -1362,32 +1385,39 @@ with tasks_tab:
                             )
                         )
 
+                    # -------------------------
+                    # 4. 予想所要時間
+                    # -------------------------
+
                     time_values = list(
                         task_time_options.values()
                     )
 
-                    nearest_minutes = min(
-                        time_values,
-                        key=lambda value: abs(
-                            value
-                            - estimated_minutes
-                        ),
+                    nearest_minutes = (
+                        min(
+                            time_values,
+                            key=lambda value: abs(
+                                value
+                                - estimated_minutes
+                            ),
+                        )
                     )
 
-                    default_index = (
+                    default_time_index = (
                         time_values.index(
                             nearest_minutes
                         )
                     )
 
-                    edited_time = (
+                    edited_time_label = (
                         st.selectbox(
-                            "予想所要時間",
+                            "だいたいどれくらい"
+                            "かかりそう？",
                             list(
                                 task_time_options.keys()
                             ),
                             index=(
-                                default_index
+                                default_time_index
                             ),
                             key=(
                                 f"time_"
@@ -1395,6 +1425,10 @@ with tasks_tab:
                             ),
                         )
                     )
+
+                    # -------------------------
+                    # 5. 変更を保存
+                    # -------------------------
 
                     if st.button(
                         "変更を保存",
@@ -1405,29 +1439,49 @@ with tasks_tab:
                         use_container_width=True,
                     ):
 
-                        new_deadline = (
-    datetime.combine(
-        edited_date,
-        edited_deadline_time,
-    )
-)
+                        if (
+                            not edited_title.strip()
+                        ):
 
-                        update_task(
-                            task_id,
-                            edited_title.strip(),
-                            new_deadline.isoformat(),
-                            task_time_options[
-                                edited_time
-                            ],
-                        )
+                            st.error(
+                                "課題名を入力してください。"
+                            )
 
-                        st.session_state[
-                            "message"
-                        ] = (
-                            "課題を更新しました。"
-                        )
+                        else:
 
-                        st.rerun()
+                            new_deadline = (
+                                datetime.combine(
+                                    edited_date,
+                                    edited_deadline_time,
+                                )
+                            )
+
+                            update_task(
+                                task_id=task_id,
+                                title=(
+                                    edited_title.strip()
+                                ),
+                                deadline=(
+                                    new_deadline.isoformat()
+                                ),
+                                estimated_minutes=(
+                                    task_time_options[
+                                        edited_time_label
+                                    ]
+                                ),
+                            )
+
+                            st.session_state[
+                                "message"
+                            ] = (
+                                "課題を更新しました。"
+                            )
+
+                            st.rerun()
+
+                    # -------------------------
+                    # 6. 削除
+                    # -------------------------
 
                     if st.button(
                         "🗑 削除",
@@ -1440,6 +1494,13 @@ with tasks_tab:
 
                         delete_task(
                             task_id
+                        )
+
+                        st.session_state[
+                            "message"
+                        ] = (
+                            f"「{title}」を"
+                            "削除しました。"
                         )
 
                         st.rerun()
@@ -1515,7 +1576,7 @@ with tasks_tab:
 
 
 # =====================================
-# 課題追加
+# 課題追加タブ
 # =====================================
 
 with add_tab:
@@ -1524,74 +1585,145 @@ with add_tab:
         "新しい課題を追加"
     )
 
+    st.caption(
+        "必要最低限の項目だけで登録できます。"
+    )
+
     # -------------------------
     # 1. 課題名
     # -------------------------
 
-    new_title = st.text_input(
-        "課題名",
-        placeholder=(
-            "例：英語レポート"
-        ),
-        key="new_task_title",
+    new_title = (
+        st.text_input(
+            "課題名",
+            placeholder=(
+                "例：推薦システム最終課題"
+            ),
+            key="new_task_title",
+        )
     )
 
     # -------------------------
     # 2. 締切日
     # -------------------------
 
-    new_deadline_date = st.date_input(
-        "締切日",
-        value=(
-            datetime.now().date()
-            + timedelta(days=1)
-        ),
-        key="new_deadline_date",
+    new_deadline_date = (
+        st.date_input(
+            "締切日",
+            value=(
+                datetime.now().date()
+                + timedelta(days=1)
+            ),
+            key="new_deadline_date",
+        )
     )
 
     # -------------------------
     # 3. 締切時刻
     # -------------------------
 
-    specify_deadline_time = st.checkbox(
-        "⏰ 締切時刻を指定する",
-        key="specify_deadline_time",
+    specify_deadline_time = (
+        st.checkbox(
+            "⏰ 締切時刻を指定する",
+            key="specify_deadline_time",
+        )
     )
 
     if specify_deadline_time:
 
-        new_deadline_time = st.time_input(
-            "締切時刻",
-            value=time(
-                23,
+        st.write(
+            "締切時刻"
+        )
+
+        (
+            hour_col,
+            minute_col,
+        ) = st.columns(2)
+
+        with hour_col:
+
+            deadline_hour = (
+                st.selectbox(
+                    "時",
+                    options=list(
+                        range(24)
+                    ),
+                    index=23,
+                    key="new_deadline_hour",
+                    format_func=(
+                        lambda x:
+                        f"{x:02d}時"
+                    ),
+                )
+            )
+
+        with minute_col:
+
+            minute_options = [
+                0,
+                5,
+                10,
+                15,
+                20,
+                25,
+                30,
+                35,
+                40,
+                45,
+                50,
+                55,
                 59,
-            ),
-            key="new_deadline_time",
+            ]
+
+            deadline_minute = (
+                st.selectbox(
+                    "分",
+                    options=(
+                        minute_options
+                    ),
+                    index=12,
+                    key="new_deadline_minute",
+                    format_func=(
+                        lambda x:
+                        f"{x:02d}分"
+                    ),
+                )
+            )
+
+        new_deadline_time = (
+            time(
+                deadline_hour,
+                deadline_minute,
+            )
         )
 
     else:
 
-        # 指定しなければ23:59
-        new_deadline_time = time(
-            23,
-            59,
+        new_deadline_time = (
+            time(
+                23,
+                59,
+            )
         )
 
     # -------------------------
     # 4. 予想所要時間
     # -------------------------
 
-    new_estimated_label = st.selectbox(
-        "だいたいどれくらいかかりそう？",
-        list(
-            task_time_options.keys()
-        ),
-        index=3,
-        key="new_estimated_time",
+    new_estimated_label = (
+        st.selectbox(
+            "だいたいどれくらい"
+            "かかりそう？",
+            list(
+                task_time_options.keys()
+            ),
+            index=3,
+            key="new_estimated_time",
+        )
     )
 
     # -------------------------
-    # 追加ボタン
+    # 5. 課題追加
     # -------------------------
 
     if st.button(
@@ -1608,9 +1740,11 @@ with add_tab:
 
         else:
 
-            deadline = datetime.combine(
-                new_deadline_date,
-                new_deadline_time,
+            deadline = (
+                datetime.combine(
+                    new_deadline_date,
+                    new_deadline_time,
+                )
             )
 
             add_task(
