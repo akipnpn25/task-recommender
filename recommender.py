@@ -2,23 +2,10 @@ from datetime import datetime, timedelta
 
 
 # =====================================
-# 残り作業時間
+# 課題単体の残り時間
 # =====================================
 
 def calculate_remaining_minutes(task):
-    """
-    進捗率から残り作業時間を計算する
-
-    task:
-    (
-        id,
-        title,
-        deadline,
-        estimated_minutes,
-        progress
-    )
-    """
-
     (
         task_id,
         title,
@@ -45,28 +32,26 @@ def calculate_available_until(
     deadline,
     current_available_minutes,
     weekly_available_minutes,
+    date_overrides=None,
 ):
-    """
-    今の空き時間と曜日別空き時間から、
-    締切までに課題へ使える時間を計算する
-    """
-
     deadline_dt = datetime.fromisoformat(
         deadline
     )
 
     now = datetime.now()
 
-    # 締切済み
     if deadline_dt <= now:
         return 0
 
-    # 今現在使える時間
+    if date_overrides is None:
+        date_overrides = {}
+
+    # 今日については
+    # 「今どれくらい時間がある？」を使う
     total_minutes = (
         current_available_minutes
     )
 
-    # 明日から締切日まで
     current_date = (
         now.date()
         + timedelta(days=1)
@@ -78,16 +63,31 @@ def calculate_available_until(
 
     while current_date <= deadline_date:
 
-        weekday = (
-            current_date.weekday()
+        date_key = (
+            current_date.isoformat()
         )
 
-        total_minutes += (
-            weekly_available_minutes.get(
-                weekday,
-                0,
+        # 今週だけの変更を優先
+        if date_key in date_overrides:
+
+            total_minutes += (
+                date_overrides[
+                    date_key
+                ]
             )
-        )
+
+        else:
+
+            weekday = (
+                current_date.weekday()
+            )
+
+            total_minutes += (
+                weekly_available_minutes.get(
+                    weekday,
+                    0,
+                )
+            )
 
         current_date += timedelta(
             days=1
@@ -97,7 +97,7 @@ def calculate_available_until(
 
 
 # =====================================
-# 課題の指標を計算
+# 課題の指標
 # =====================================
 
 def get_task_metrics(
@@ -105,12 +105,8 @@ def get_task_metrics(
     all_tasks,
     current_available_minutes,
     weekly_available_minutes,
+    date_overrides=None,
 ):
-    """
-    課題の締切までに、
-    全課題を終わらせる余裕があるか計算する
-    """
-
     (
         task_id,
         title,
@@ -119,8 +115,10 @@ def get_task_metrics(
         progress,
     ) = task
 
-    deadline_dt = datetime.fromisoformat(
-        deadline
+    deadline_dt = (
+        datetime.fromisoformat(
+            deadline
+        )
     )
 
     now = datetime.now()
@@ -129,23 +127,17 @@ def get_task_metrics(
         deadline_dt - now
     ).total_seconds() / 3600
 
-    # -------------------------
-    # 締切までに使える時間
-    # -------------------------
-
     available_minutes = (
         calculate_available_until(
             deadline,
             current_available_minutes,
             weekly_available_minutes,
+            date_overrides,
         )
     )
 
-    # -------------------------
-    # この締切までに必要な
-    # 全課題の残り作業時間
-    # -------------------------
-
+    # この課題の締切以前に来る
+    # 全課題の残り時間を合計
     required_minutes = 0
 
     for other_task in all_tasks:
@@ -164,19 +156,11 @@ def get_task_metrics(
                 )
             )
 
-    # -------------------------
-    # この課題自体の残り時間
-    # -------------------------
-
     task_remaining_minutes = (
         calculate_remaining_minutes(
             task
         )
     )
-
-    # -------------------------
-    # 余裕
-    # -------------------------
 
     slack_minutes = (
         available_minutes
@@ -190,11 +174,15 @@ def get_task_metrics(
             / available_minutes
         )
 
-    else:
+    elif required_minutes > 0:
 
         workload_ratio = float(
             "inf"
         )
+
+    else:
+
+        workload_ratio = 0
 
     return {
         "remaining_hours":
@@ -220,50 +208,43 @@ def get_task_metrics(
 # =====================================
 # 推薦スコア
 # =====================================
+
 def calculate_score(
     task,
     all_tasks,
     current_available_minutes,
     weekly_available_minutes,
+    date_overrides=None,
 ):
-    """
-    おすすめ度と内訳を計算する
-    """
-
-    (
-        task_id,
-        title,
-        deadline,
-        estimated_minutes,
-        progress,
-    ) = task
-
     metrics = get_task_metrics(
         task,
         all_tasks,
         current_available_minutes,
         weekly_available_minutes,
+        date_overrides,
     )
 
-    remaining_hours = metrics[
-        "remaining_hours"
-    ]
+    remaining_hours = (
+        metrics["remaining_hours"]
+    )
 
-    workload_ratio = metrics[
-        "workload_ratio"
-    ]
+    slack_minutes = (
+        metrics["slack_minutes"]
+    )
 
-    slack_minutes = metrics[
-        "slack_minutes"
-    ]
+    workload_ratio = (
+        metrics["workload_ratio"]
+    )
 
-    task_remaining_minutes = metrics[
-        "task_remaining_minutes"
-    ]
+    task_remaining_minutes = (
+        metrics[
+            "task_remaining_minutes"
+        ]
+    )
 
-    # =========================
+    # -------------------------
     # 締切超過
-    # =========================
+    # -------------------------
 
     if remaining_hours <= 0:
 
@@ -274,22 +255,27 @@ def calculate_score(
             "fit": 20,
         }
 
-    # =========================
+    # -------------------------
     # 1. 締切の近さ
     # 最大30点
-    # =========================
+    # -------------------------
 
-    one_week_hours = 24 * 7
+    one_week_hours = (
+        24 * 7
+    )
 
     urgency_score = max(
         0,
-        1 - remaining_hours / one_week_hours,
+        1 - (
+            remaining_hours
+            / one_week_hours
+        ),
     ) * 30
 
-    # =========================
+    # -------------------------
     # 2. 時間不足リスク
     # 最大50点
-    # =========================
+    # -------------------------
 
     if slack_minutes < 0:
 
@@ -302,10 +288,10 @@ def calculate_score(
             1,
         ) * 50
 
-    # =========================
+    # -------------------------
     # 3. 今の空き時間との相性
     # 最大20点
-    # =========================
+    # -------------------------
 
     if task_remaining_minutes > 0:
 
@@ -319,11 +305,9 @@ def calculate_score(
 
         fit_ratio = 1
 
-    fit_score = fit_ratio * 20
-
-    # =========================
-    # 合計
-    # =========================
+    fit_score = (
+        fit_ratio * 20
+    )
 
     total_score = (
         urgency_score
@@ -333,7 +317,10 @@ def calculate_score(
 
     return {
         "total": round(
-            min(total_score, 100)
+            min(
+                total_score,
+                100,
+            )
         ),
         "urgency": round(
             urgency_score
@@ -356,11 +343,8 @@ def get_reason(
     all_tasks,
     current_available_minutes,
     weekly_available_minutes,
+    date_overrides=None,
 ):
-    """
-    推薦理由を作る
-    """
-
     (
         task_id,
         title,
@@ -374,14 +358,19 @@ def get_reason(
         all_tasks,
         current_available_minutes,
         weekly_available_minutes,
+        date_overrides,
     )
 
     remaining_hours = (
-        metrics["remaining_hours"]
+        metrics[
+            "remaining_hours"
+        ]
     )
 
     slack_minutes = (
-        metrics["slack_minutes"]
+        metrics[
+            "slack_minutes"
+        ]
     )
 
     task_remaining_minutes = (
@@ -421,9 +410,8 @@ def get_reason(
     if slack_minutes < 0:
 
         reasons.append(
-            "この締切までに必要な"
-            "課題時間が、確保できる"
-            "時間を超えています"
+            "この締切までに必要な課題時間が、"
+            "確保できる時間を超えています"
         )
 
     elif slack_minutes <= 60:
@@ -441,7 +429,7 @@ def get_reason(
         )
 
     # -------------------------
-    # 今の空き時間との相性
+    # 今の時間との相性
     # -------------------------
 
     if (
@@ -468,7 +456,7 @@ def get_reason(
 
         reasons.append(
             "残り作業量が多いため、"
-            "今から少し進めるのがおすすめです"
+            "今から少し進めておくのがおすすめです"
         )
 
     # -------------------------
@@ -478,7 +466,7 @@ def get_reason(
     if progress >= 70:
 
         reasons.append(
-            "すでにかなり進んでいるため、"
+            "かなり進んでいるため、"
             "今終わらせやすい課題です"
         )
 
@@ -493,11 +481,8 @@ def recommend_tasks(
     tasks,
     current_available_minutes,
     weekly_available_minutes,
+    date_overrides=None,
 ):
-    """
-    全課題をおすすめ度順に並べる
-    """
-
     results = []
 
     for task in tasks:
@@ -507,6 +492,7 @@ def recommend_tasks(
             tasks,
             current_available_minutes,
             weekly_available_minutes,
+            date_overrides,
         )
 
         score = calculate_score(
@@ -514,6 +500,7 @@ def recommend_tasks(
             tasks,
             current_available_minutes,
             weekly_available_minutes,
+            date_overrides,
         )
 
         reasons = get_reason(
@@ -521,17 +508,18 @@ def recommend_tasks(
             tasks,
             current_available_minutes,
             weekly_available_minutes,
+            date_overrides,
         )
 
         results.append(
-    {
-        "task": task,
-        "score": score["total"],
-        "score_details": score,
-        "reasons": reasons,
-        "metrics": metrics,
-    }
-)
+            {
+                "task": task,
+                "score": score["total"],
+                "score_details": score,
+                "reasons": reasons,
+                "metrics": metrics,
+            }
+        )
 
     results.sort(
         key=lambda result:

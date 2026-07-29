@@ -16,6 +16,9 @@ from db import (
     delete_task,
     get_weekly_settings,
     save_weekly_settings,
+    get_date_overrides,
+    save_date_override,
+    delete_date_override,
 )
 
 
@@ -24,51 +27,82 @@ from db import (
 # =====================================
 
 def format_minutes(minutes):
-    """分を「○時間○分」に変換する"""
+    minutes = max(
+        0,
+        round(minutes),
+    )
 
-    minutes = max(0, round(minutes))
+    hours = (
+        minutes // 60
+    )
 
-    hours = minutes // 60
-    remaining_minutes = minutes % 60
+    remaining_minutes = (
+        minutes % 60
+    )
 
     if hours == 0:
-        return f"{remaining_minutes}分"
+        return (
+            f"{remaining_minutes}分"
+        )
 
     if remaining_minutes == 0:
-        return f"{hours}時間"
+        return (
+            f"{hours}時間"
+        )
 
-    return f"{hours}時間{remaining_minutes}分"
+    return (
+        f"{hours}時間"
+        f"{remaining_minutes}分"
+    )
 
 
-def get_recommendation_status(recommendation):
-    """推薦結果を分かりやすい状態に変換する"""
+def get_recommendation_status(
+    recommendation
+):
+    metrics = (
+        recommendation["metrics"]
+    )
 
-    metrics = recommendation["metrics"]
+    remaining_hours = (
+        metrics["remaining_hours"]
+    )
 
-    remaining_hours = metrics["remaining_hours"]
-    slack_minutes = metrics["slack_minutes"]
-    score = recommendation["score"]
+    slack_minutes = (
+        metrics["slack_minutes"]
+    )
+
+    score = (
+        recommendation["score"]
+    )
 
     if remaining_hours <= 0:
+
         return (
             "🚨 締切超過",
-            "締切を過ぎています。優先して取り組みましょう。",
+            "締切を過ぎています。"
+            "優先して取り組みましょう。",
         )
 
     if slack_minutes < 0:
+
         return (
             "🔥 今すぐやる",
             (
-                f"このままだと約"
+                "このままだと約"
                 f"{format_minutes(abs(slack_minutes))}"
-                f"不足する見込みです。"
+                "不足する見込みです。"
             ),
         )
 
-    if slack_minutes <= 60 or score >= 75:
+    if (
+        slack_minutes <= 60
+        or score >= 75
+    ):
+
         return (
             "⚠️ そろそろやる",
-            "締切までの余裕が少なくなっています。",
+            "締切までの余裕が"
+            "少なくなっています。",
         )
 
     return (
@@ -78,7 +112,7 @@ def get_recommendation_status(recommendation):
 
 
 # =====================================
-# ページ設定
+# 初期設定
 # =====================================
 
 st.set_page_config(
@@ -88,7 +122,9 @@ st.set_page_config(
 
 init_db()
 
-st.title("📚 今やる課題推薦")
+st.title(
+    "📚 今やる課題推薦"
+)
 
 st.caption(
     "空き時間・締切・残り作業量から、"
@@ -97,20 +133,29 @@ st.caption(
 
 
 # =====================================
-# 操作後メッセージ
+# メッセージ
 # =====================================
 
 if "message" in st.session_state:
+
     st.success(
-        st.session_state.pop("message")
+        st.session_state.pop(
+            "message"
+        )
     )
 
 
 # =====================================
-# 曜日別空き時間設定
+# 設定読み込み
 # =====================================
 
-saved_weekly_settings = get_weekly_settings()
+saved_weekly_settings = (
+    get_weekly_settings()
+)
+
+date_overrides = (
+    get_date_overrides()
+)
 
 weekday_names = [
     "月曜日",
@@ -135,12 +180,22 @@ weekly_time_values = [
 weekly_available_minutes = {}
 
 
+# =====================================
+# サイドバー
+# =====================================
+
 with st.sidebar:
 
-    st.header("⚙️ 設定")
+    st.header(
+        "⚙️ 設定"
+    )
+
+    # -------------------------
+    # 普段の空き時間
+    # -------------------------
 
     with st.expander(
-        "普段の空き時間を変更"
+        "普段の空き時間"
     ):
 
         st.caption(
@@ -148,29 +203,45 @@ with st.sidebar:
             "課題へ使えるか設定します。"
         )
 
-        for weekday_index, weekday_name in enumerate(
+        for (
+            weekday_index,
+            weekday_name,
+        ) in enumerate(
             weekday_names
         ):
 
-            saved_minutes = saved_weekly_settings.get(
-                weekday_index,
-                120,
+            saved_minutes = (
+                saved_weekly_settings.get(
+                    weekday_index,
+                    120,
+                )
             )
 
             try:
-                default_index = weekly_time_values.index(
-                    saved_minutes
+
+                default_index = (
+                    weekly_time_values.index(
+                        saved_minutes
+                    )
                 )
 
             except ValueError:
+
                 default_index = 3
 
-            selected_minutes = st.selectbox(
-                weekday_name,
-                weekly_time_values,
-                index=default_index,
-                format_func=format_minutes,
-                key=f"weekday_{weekday_index}",
+            selected_minutes = (
+                st.selectbox(
+                    weekday_name,
+                    weekly_time_values,
+                    index=default_index,
+                    format_func=(
+                        format_minutes
+                    ),
+                    key=(
+                        f"weekday_"
+                        f"{weekday_index}"
+                    ),
+                )
             )
 
             weekly_available_minutes[
@@ -178,7 +249,7 @@ with st.sidebar:
             ] = selected_minutes
 
         if st.button(
-            "設定を保存",
+            "普段の設定を保存",
             use_container_width=True,
         ):
 
@@ -186,11 +257,135 @@ with st.sidebar:
                 weekly_available_minutes
             )
 
-            st.session_state["message"] = (
-                "空き時間の設定を保存しました。"
+            st.session_state[
+                "message"
+            ] = (
+                "普段の空き時間を保存しました。"
             )
 
             st.rerun()
+
+    # -------------------------
+    # 今週だけ変更
+    # -------------------------
+
+    with st.expander(
+        "📅 今週だけ変更"
+    ):
+
+        st.caption(
+            "試験・バイトなどで"
+            "普段と違う日だけ変更できます。"
+        )
+
+        tomorrow = (
+            datetime.now().date()
+            + timedelta(days=1)
+        )
+
+        override_date = (
+            st.date_input(
+                "変更する日",
+                value=tomorrow,
+                min_value=tomorrow,
+                max_value=(
+                    datetime.now().date()
+                    + timedelta(days=7)
+                ),
+                key="override_date",
+            )
+        )
+
+        override_minutes = (
+            st.selectbox(
+                "その日に使える時間",
+                weekly_time_values,
+                index=3,
+                format_func=(
+                    format_minutes
+                ),
+                key="override_minutes",
+            )
+        )
+
+        if st.button(
+            "この日を変更",
+            key="save_override",
+            use_container_width=True,
+        ):
+
+            save_date_override(
+                override_date.isoformat(),
+                override_minutes,
+            )
+
+            st.session_state[
+                "message"
+            ] = (
+                f"{override_date.strftime('%m/%d')}の"
+                "空き時間を変更しました。"
+            )
+
+            st.rerun()
+
+        # 登録済み例外
+        if date_overrides:
+
+            st.divider()
+
+            st.caption(
+                "変更済み"
+            )
+
+            today = (
+                datetime.now().date()
+            )
+
+            for (
+                override_date_string,
+                minutes,
+            ) in sorted(
+                date_overrides.items()
+            ):
+
+                date_object = (
+                    datetime.fromisoformat(
+                        override_date_string
+                    ).date()
+                )
+
+                # 過去の設定は表示しない
+                if date_object < today:
+                    continue
+
+                col1, col2 = (
+                    st.columns(
+                        [3, 1]
+                    )
+                )
+
+                with col1:
+
+                    st.write(
+                        f"{date_object.strftime('%m/%d')} "
+                        f"→ {format_minutes(minutes)}"
+                    )
+
+                with col2:
+
+                    if st.button(
+                        "戻す",
+                        key=(
+                            "remove_override_"
+                            f"{override_date_string}"
+                        ),
+                    ):
+
+                        delete_date_override(
+                            override_date_string
+                        )
+
+                        st.rerun()
 
 
 # =====================================
@@ -215,22 +410,26 @@ task_time_options = {
 # タブ
 # =====================================
 
-recommend_tab, tasks_tab, add_tab = st.tabs(
-    [
-        "🔥 おすすめ",
-        "📋 課題一覧",
-        "➕ 課題追加",
-    ]
+recommend_tab, tasks_tab, add_tab = (
+    st.tabs(
+        [
+            "🔥 おすすめ",
+            "📋 課題一覧",
+            "➕ 課題追加",
+        ]
+    )
 )
 
 
 # =====================================
-# おすすめタブ
+# おすすめ
 # =====================================
 
 with recommend_tab:
 
-    st.subheader("今やるなら？")
+    st.subheader(
+        "今やるなら？"
+    )
 
     available_options = {
         "15分": 15,
@@ -242,50 +441,53 @@ with recommend_tab:
         "3時間": 180,
     }
 
-    available_label = st.radio(
-        "今どれくらい時間がありますか？",
-        list(available_options.keys()),
-        index=3,
-        horizontal=True,
-        key="available_time",
+    available_label = (
+        st.radio(
+            "今どれくらい時間がありますか？",
+            list(
+                available_options.keys()
+            ),
+            index=3,
+            horizontal=True,
+            key="available_time",
+        )
     )
 
-    available_minutes = available_options[
-        available_label
-    ]
+    available_minutes = (
+        available_options[
+            available_label
+        ]
+    )
 
-    # ---------------------------------
-    # 課題がない場合
-    # ---------------------------------
-
-    if len(tasks) == 0:
+    if not tasks:
 
         st.info(
             "課題を登録すると、"
-            "ここにおすすめが表示されます。"
+            "おすすめが表示されます。"
         )
-
-    # ---------------------------------
-    # 推薦
-    # ---------------------------------
 
     else:
 
-        recommendations = recommend_tasks(
-            tasks,
-            available_minutes,
-            weekly_available_minutes,
+        recommendations = (
+            recommend_tasks(
+                tasks,
+                available_minutes,
+                weekly_available_minutes,
+                date_overrides,
+            )
         )
 
         top_recommendations = (
             recommendations[:3]
         )
 
-        # =============================
+        # =========================
         # 1位
-        # =============================
+        # =========================
 
-        best = top_recommendations[0]
+        best = (
+            top_recommendations[0]
+        )
 
         (
             best_task_id,
@@ -302,21 +504,37 @@ with recommend_tab:
         )
 
         status_title, status_message = (
-            get_recommendation_status(best)
+            get_recommendation_status(
+                best
+            )
         )
 
-        metrics = best["metrics"]
+        metrics = (
+            best["metrics"]
+        )
+
+        remaining_hours = (
+            metrics[
+                "remaining_hours"
+            ]
+        )
 
         available_until_deadline = (
-            metrics["available_minutes"]
+            metrics[
+                "available_minutes"
+            ]
         )
 
         required_until_deadline = (
-            metrics["required_minutes"]
+            metrics[
+                "required_minutes"
+            ]
         )
 
         slack_minutes = (
-            metrics["slack_minutes"]
+            metrics[
+                "slack_minutes"
+            ]
         )
 
         remaining_minutes = (
@@ -324,14 +542,6 @@ with recommend_tab:
                 "task_remaining_minutes"
             ]
         )
-
-        remaining_hours = (
-            metrics["remaining_hours"]
-        )
-
-        # -----------------------------
-        # メイン推薦
-        # -----------------------------
 
         st.markdown(
             f"## 🥇 {status_title}"
@@ -342,21 +552,23 @@ with recommend_tab:
         )
 
         st.caption(
-            f"📅 締切："
+            "📅 締切："
             f"{best_deadline_dt.strftime('%m/%d %H:%M')}"
         )
 
         if remaining_hours > 0:
 
             if remaining_hours < 24:
+
                 st.caption(
-                    f"⏰ 締切まで約"
+                    "⏰ 締切まで約"
                     f"{max(1, round(remaining_hours))}時間"
                 )
 
             else:
+
                 st.caption(
-                    f"📅 締切まで約"
+                    "📅 締切まで約"
                     f"{round(remaining_hours / 24, 1)}日"
                 )
 
@@ -364,9 +576,9 @@ with recommend_tab:
             status_message
         )
 
-        # -----------------------------
+        # -------------------------
         # 進捗
-        # -----------------------------
+        # -------------------------
 
         st.write(
             f"**現在の進捗："
@@ -378,13 +590,13 @@ with recommend_tab:
         )
 
         st.caption(
-            f"この課題の残り作業時間："
+            "この課題の残り："
             f"約{format_minutes(remaining_minutes)}"
         )
 
-        # -----------------------------
-        # 締切までの見通し
-        # -----------------------------
+        # -------------------------
+        # 見通し
+        # -------------------------
 
         st.write(
             "**締切までの見通し**"
@@ -419,7 +631,9 @@ with recommend_tab:
                 st.metric(
                     "不足",
                     format_minutes(
-                        abs(slack_minutes)
+                        abs(
+                            slack_minutes
+                        )
                     ),
                 )
 
@@ -433,98 +647,91 @@ with recommend_tab:
                 )
 
         st.caption(
-            "※「必要時間」は、この課題と"
-            "それ以前に締切を迎える課題の"
+            "※必要時間は、この課題と"
+            "それ以前が締切の課題の"
             "残り作業時間の合計です。"
         )
 
-        # -----------------------------
-        # 推薦理由
-        # -----------------------------
+        # -------------------------
+        # 理由
+        # -------------------------
 
         st.write(
-            "**この課題をおすすめする理由**"
+            "**おすすめ理由**"
         )
 
-        for reason in best["reasons"]:
+        for reason in (
+            best["reasons"]
+        ):
+
             st.write(
                 f"・{reason}"
             )
 
-        # -----------------------------
-        # なぜ1位？
-        # -----------------------------
+        # -------------------------
+        # スコア詳細
+        # -------------------------
 
         with st.expander(
             "💡 なぜこの課題が1位？"
         ):
 
+            score_details = (
+                best[
+                    "score_details"
+                ]
+            )
+
             st.write(
-                f"**総合おすすめ度："
+                "**総合おすすめ度："
                 f"{best['score']} / 100**"
             )
 
-            score_details = best.get(
-                "score_details"
+            st.write(
+                "締切の近さ"
             )
 
-            if score_details:
+            st.progress(
+                score_details[
+                    "urgency"
+                ] / 30
+            )
 
-                st.write(
-                    "締切の近さ"
-                )
+            st.caption(
+                f"{score_details['urgency']} / 30点"
+            )
 
-                st.progress(
-                    score_details[
-                        "urgency"
-                    ] / 30
-                )
+            st.write(
+                "時間不足のリスク"
+            )
 
-                st.caption(
-                    f"{score_details['urgency']}"
-                    f" / 30点"
-                )
+            st.progress(
+                score_details[
+                    "risk"
+                ] / 50
+            )
 
-                st.write(
-                    "時間不足のリスク"
-                )
+            st.caption(
+                f"{score_details['risk']} / 50点"
+            )
 
-                st.progress(
-                    score_details[
-                        "risk"
-                    ] / 50
-                )
+            st.write(
+                "今の空き時間との相性"
+            )
 
-                st.caption(
-                    f"{score_details['risk']}"
-                    f" / 50点"
-                )
+            st.progress(
+                score_details[
+                    "fit"
+                ] / 20
+            )
 
-                st.write(
-                    "今の空き時間との相性"
-                )
+            st.caption(
+                f"{score_details['fit']} / 20点"
+            )
 
-                st.progress(
-                    score_details[
-                        "fit"
-                    ] / 20
-                )
-
-                st.caption(
-                    f"{score_details['fit']}"
-                    f" / 20点"
-                )
-
-            else:
-
-                st.caption(
-                    "現在のrecommender.pyでは"
-                    "スコア内訳が返されていません。"
-                )
-
-        # -----------------------------
+        # -------------------------
         # 進捗更新
-        # -----------------------------
+        # -------------------------
 
         st.divider()
 
@@ -556,11 +763,16 @@ with recommend_tab:
                     f"{best_task_id}"
                 ),
                 width="stretch",
-                label_visibility="collapsed",
+                label_visibility=(
+                    "collapsed"
+                ),
             )
         )
 
-        if selected_label is not None:
+        if (
+            selected_label
+            is not None
+        ):
 
             new_progress = (
                 progress_options[
@@ -581,7 +793,7 @@ with recommend_tab:
                 st.session_state[
                     "message"
                 ] = (
-                    f"「{best_title}」の進捗を"
+                    f"「{best_title}」を"
                     f"{selected_label}に更新しました。"
                 )
 
@@ -596,9 +808,8 @@ with recommend_tab:
             use_container_width=True,
         ):
 
-            update_progress(
-                best_task_id,
-                100,
+            complete_task(
+                best_task_id
             )
 
             st.session_state[
@@ -609,25 +820,30 @@ with recommend_tab:
 
             st.rerun()
 
-        # =============================
+        # =========================
         # 2位・3位
-        # =============================
+        # =========================
 
-        if len(
-            top_recommendations
-        ) >= 2:
+        if (
+            len(
+                top_recommendations
+            )
+            >= 2
+        ):
 
             st.divider()
 
-            st.markdown(
-                "### 他のおすすめ"
+            st.subheader(
+                "他のおすすめ"
             )
 
             for (
                 rank,
                 recommendation,
             ) in enumerate(
-                top_recommendations[1:],
+                top_recommendations[
+                    1:
+                ],
                 start=2,
             ):
 
@@ -637,9 +853,11 @@ with recommend_tab:
                     deadline,
                     estimated_minutes,
                     progress,
-                ) = recommendation[
-                    "task"
-                ]
+                ) = (
+                    recommendation[
+                        "task"
+                    ]
+                )
 
                 deadline_dt = (
                     datetime.fromisoformat(
@@ -665,15 +883,15 @@ with recommend_tab:
                     ]
                 )
 
+                medal = (
+                    "🥈"
+                    if rank == 2
+                    else "🥉"
+                )
+
                 with st.container(
                     border=True
                 ):
-
-                    medal = (
-                        "🥈"
-                        if rank == 2
-                        else "🥉"
-                    )
 
                     st.markdown(
                         f"#### {medal} "
@@ -694,7 +912,7 @@ with recommend_tab:
                     with col2:
 
                         st.write(
-                            "⏱️ 残り "
+                            "⏱️ "
                             f"{format_minutes(task_remaining)}"
                         )
 
@@ -707,19 +925,19 @@ with recommend_tab:
                     if task_slack < 0:
 
                         st.warning(
-                            "この締切までに約"
+                            "締切までに約"
                             f"{format_minutes(abs(task_slack))}"
                             "不足する見込みです。"
                         )
 
                     with st.expander(
-                        "おすすめ理由を見る"
+                        "おすすめ理由"
                     ):
 
                         st.write(
-                            f"おすすめ度："
+                            "おすすめ度："
                             f"{recommendation['score']}"
-                            f" / 100"
+                            " / 100"
                         )
 
                         for reason in (
@@ -734,19 +952,20 @@ with recommend_tab:
 
 
 # =====================================
-# 課題一覧タブ
+# 課題一覧
 # =====================================
 
 with tasks_tab:
 
     st.subheader(
-        f"未完了の課題（{len(tasks)}件）"
+        f"未完了の課題"
+        f"（{len(tasks)}件）"
     )
 
-    if len(tasks) == 0:
+    if not tasks:
 
         st.info(
-            "現在、未完了の課題はありません。"
+            "未完了の課題はありません。"
         )
 
     else:
@@ -767,10 +986,15 @@ with tasks_tab:
                 )
             )
 
-            remaining_minutes = round(
-                estimated_minutes
-                * (100 - progress)
-                / 100
+            remaining_minutes = (
+                round(
+                    estimated_minutes
+                    * (
+                        100
+                        - progress
+                    )
+                    / 100
+                )
             )
 
             with st.container(
@@ -789,8 +1013,7 @@ with tasks_tab:
 
                     st.write(
                         "📅 "
-                        f"{deadline_dt.strftime('%m/%d')}"
-                        "まで"
+                        f"{deadline_dt.strftime('%m/%d')}まで"
                     )
 
                 with col2:
@@ -800,10 +1023,6 @@ with tasks_tab:
                         f"{format_minutes(remaining_minutes)}"
                     )
 
-                # ---------------------
-                # 進捗
-                # ---------------------
-
                 st.write(
                     f"進捗：{progress}%"
                 )
@@ -812,13 +1031,12 @@ with tasks_tab:
                     progress / 100
                 )
 
-                # ---------------------
-                # 完了
-                # ---------------------
-
                 if st.button(
-                    "✅ 完了にする",
-                    key=f"complete_{task_id}",
+                    "✅ 完了",
+                    key=(
+                        f"complete_"
+                        f"{task_id}"
+                    ),
                     use_container_width=True,
                 ):
 
@@ -829,15 +1047,10 @@ with tasks_tab:
                     st.session_state[
                         "message"
                     ] = (
-                        f"「{title}」を"
-                        "完了にしました！"
+                        f"「{title}」を完了にしました！"
                     )
 
                     st.rerun()
-
-                # ---------------------
-                # 編集
-                # ---------------------
 
                 with st.expander(
                     "✏️ 編集"
@@ -848,7 +1061,8 @@ with tasks_tab:
                             "課題名",
                             value=title,
                             key=(
-                                f"title_{task_id}"
+                                f"title_"
+                                f"{task_id}"
                             ),
                         )
                     )
@@ -860,7 +1074,8 @@ with tasks_tab:
                                 deadline_dt.date()
                             ),
                             key=(
-                                f"date_{task_id}"
+                                f"date_"
+                                f"{task_id}"
                             ),
                         )
                     )
@@ -869,31 +1084,33 @@ with tasks_tab:
                         task_time_options.values()
                     )
 
-                    nearest_minutes = min(
-                        time_values,
-                        key=lambda value: abs(
-                            value
-                            - estimated_minutes
-                        ),
+                    nearest_minutes = (
+                        min(
+                            time_values,
+                            key=lambda value:
+                            abs(
+                                value
+                                - estimated_minutes
+                            ),
+                        )
                     )
 
-                    default_time_index = (
+                    default_index = (
                         time_values.index(
                             nearest_minutes
                         )
                     )
 
-                    edited_time_label = (
+                    edited_time = (
                         st.selectbox(
                             "予想所要時間",
                             list(
                                 task_time_options.keys()
                             ),
-                            index=(
-                                default_time_index
-                            ),
+                            index=default_index,
                             key=(
-                                f"time_{task_id}"
+                                f"time_"
+                                f"{task_id}"
                             ),
                         )
                     )
@@ -901,7 +1118,8 @@ with tasks_tab:
                     if st.button(
                         "変更を保存",
                         key=(
-                            f"save_{task_id}"
+                            f"save_"
+                            f"{task_id}"
                         ),
                         use_container_width=True,
                     ):
@@ -909,23 +1127,20 @@ with tasks_tab:
                         new_deadline = (
                             datetime.combine(
                                 edited_date,
-                                time(23, 59),
+                                time(
+                                    23,
+                                    59,
+                                ),
                             )
                         )
 
                         update_task(
-                            task_id=task_id,
-                            title=(
-                                edited_title.strip()
-                            ),
-                            deadline=(
-                                new_deadline.isoformat()
-                            ),
-                            estimated_minutes=(
-                                task_time_options[
-                                    edited_time_label
-                                ]
-                            ),
+                            task_id,
+                            edited_title.strip(),
+                            new_deadline.isoformat(),
+                            task_time_options[
+                                edited_time
+                            ],
                         )
 
                         st.session_state[
@@ -939,7 +1154,8 @@ with tasks_tab:
                     if st.button(
                         "🗑 削除",
                         key=(
-                            f"delete_{task_id}"
+                            f"delete_"
+                            f"{task_id}"
                         ),
                         use_container_width=True,
                     ):
@@ -948,18 +1164,11 @@ with tasks_tab:
                             task_id
                         )
 
-                        st.session_state[
-                            "message"
-                        ] = (
-                            f"「{title}」を"
-                            "削除しました。"
-                        )
-
                         st.rerun()
 
-    # ---------------------------------
+    # -------------------------
     # 完了済み
-    # ---------------------------------
+    # -------------------------
 
     completed_tasks = (
         get_completed_tasks()
@@ -970,7 +1179,7 @@ with tasks_tab:
         st.divider()
 
         with st.expander(
-            f"✅ 完了済み"
+            "✅ 完了済み"
             f"（{len(completed_tasks)}件）"
         ):
 
@@ -981,6 +1190,7 @@ with tasks_tab:
                     title,
                     deadline,
                     estimated_minutes,
+                    progress,
                 ) = task
 
                 st.write(
@@ -996,7 +1206,8 @@ with tasks_tab:
                     if st.button(
                         "↩️ 元に戻す",
                         key=(
-                            f"restore_{task_id}"
+                            f"restore_"
+                            f"{task_id}"
                         ),
                         use_container_width=True,
                     ):
@@ -1024,11 +1235,9 @@ with tasks_tab:
 
                         st.rerun()
 
-                st.divider()
-
 
 # =====================================
-# 課題追加タブ
+# 課題追加
 # =====================================
 
 with add_tab:
@@ -1046,11 +1255,13 @@ with add_tab:
         clear_on_submit=True,
     ):
 
-        new_title = st.text_input(
-            "課題名",
-            placeholder=(
-                "例：推薦システム最終課題"
-            ),
+        new_title = (
+            st.text_input(
+                "課題名",
+                placeholder=(
+                    "例：推薦システム最終課題"
+                ),
+            )
         )
 
         new_deadline_date = (
@@ -1090,30 +1301,28 @@ with add_tab:
 
         else:
 
-            new_deadline = (
+            deadline = (
                 datetime.combine(
                     new_deadline_date,
-                    time(23, 59),
+                    time(
+                        23,
+                        59,
+                    ),
                 )
             )
 
             add_task(
-                title=new_title.strip(),
-                deadline=(
-                    new_deadline.isoformat()
-                ),
-                estimated_minutes=(
-                    task_time_options[
-                        new_estimated_label
-                    ]
-                ),
+                new_title.strip(),
+                deadline.isoformat(),
+                task_time_options[
+                    new_estimated_label
+                ],
             )
 
             st.session_state[
                 "message"
             ] = (
-                f"「{new_title}」を"
-                "追加しました！"
+                f"「{new_title}」を追加しました！"
             )
 
             st.rerun()

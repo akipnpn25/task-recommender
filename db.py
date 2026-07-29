@@ -2,10 +2,6 @@ import sqlite3
 from pathlib import Path
 
 
-# =====================================
-# DB設定
-# =====================================
-
 DB_PATH = Path("data/tasks.db")
 
 DEFAULT_WEEKLY_SETTINGS = {
@@ -24,8 +20,6 @@ DEFAULT_WEEKLY_SETTINGS = {
 # =====================================
 
 def get_connection():
-    """SQLiteへの接続を返す"""
-
     DB_PATH.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -35,12 +29,10 @@ def get_connection():
 
 
 # =====================================
-# DB初期化
+# 初期化
 # =====================================
 
 def init_db():
-    """必要なテーブル・カラムを作成する"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -61,8 +53,7 @@ def init_db():
         """
     )
 
-    # 既存DBを使っている場合のために
-    # カラムが存在するか確認する
+    # 古いDBにも対応
     cursor.execute(
         "PRAGMA table_info(tasks)"
     )
@@ -72,30 +63,24 @@ def init_db():
         for column in cursor.fetchall()
     ]
 
-    # progressがない古いDBなら追加
     if "progress" not in columns:
-
         cursor.execute(
             """
             ALTER TABLE tasks
-            ADD COLUMN progress
-            INTEGER NOT NULL DEFAULT 0
+            ADD COLUMN progress INTEGER NOT NULL DEFAULT 0
             """
         )
 
-    # completedがない古いDBなら追加
     if "completed" not in columns:
-
         cursor.execute(
             """
             ALTER TABLE tasks
-            ADD COLUMN completed
-            INTEGER NOT NULL DEFAULT 0
+            ADD COLUMN completed INTEGER NOT NULL DEFAULT 0
             """
         )
 
     # -------------------------
-    # 曜日別空き時間テーブル
+    # 曜日別空き時間
     # -------------------------
 
     cursor.execute(
@@ -107,36 +92,33 @@ def init_db():
         """
     )
 
-    # 初回のみデフォルト設定を登録
+    for weekday, minutes in DEFAULT_WEEKLY_SETTINGS.items():
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO weekly_settings (
+                weekday,
+                available_minutes
+            )
+            VALUES (?, ?)
+            """,
+            (
+                weekday,
+                minutes,
+            ),
+        )
+
+    # -------------------------
+    # 特定日の空き時間
+    # -------------------------
+
     cursor.execute(
         """
-        SELECT COUNT(*)
-        FROM weekly_settings
+        CREATE TABLE IF NOT EXISTS date_overrides (
+            date TEXT PRIMARY KEY,
+            available_minutes INTEGER NOT NULL
+        )
         """
     )
-
-    count = cursor.fetchone()[0]
-
-    if count == 0:
-
-        for (
-            weekday,
-            minutes,
-        ) in DEFAULT_WEEKLY_SETTINGS.items():
-
-            cursor.execute(
-                """
-                INSERT INTO weekly_settings (
-                    weekday,
-                    available_minutes
-                )
-                VALUES (?, ?)
-                """,
-                (
-                    weekday,
-                    minutes,
-                ),
-            )
 
     conn.commit()
     conn.close()
@@ -151,8 +133,6 @@ def add_task(
     deadline,
     estimated_minutes,
 ):
-    """新しい課題を登録する"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -179,12 +159,10 @@ def add_task(
 
 
 # =====================================
-# 未完了課題取得
+# 未完了課題
 # =====================================
 
 def get_tasks():
-    """未完了の課題を締切順に取得する"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -210,12 +188,10 @@ def get_tasks():
 
 
 # =====================================
-# 完了済み課題取得
+# 完了済み課題
 # =====================================
 
 def get_completed_tasks():
-    """完了済みの課題を取得する"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -225,7 +201,8 @@ def get_completed_tasks():
             id,
             title,
             deadline,
-            estimated_minutes
+            estimated_minutes,
+            progress
         FROM tasks
         WHERE completed = 1
         ORDER BY deadline DESC
@@ -249,8 +226,6 @@ def update_task(
     deadline,
     estimated_minutes,
 ):
-    """課題名・締切・予想時間を変更する"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -283,46 +258,32 @@ def update_progress(
     task_id,
     progress,
 ):
-    """課題の進捗率を更新する"""
-
-    # 0〜100%に制限
     progress = max(
         0,
         min(100, progress),
     )
 
+    completed = (
+        1 if progress >= 100 else 0
+    )
+
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 100%なら自動で完了
-    if progress >= 100:
-
-        cursor.execute(
-            """
-            UPDATE tasks
-            SET
-                progress = 100,
-                completed = 1
-            WHERE id = ?
-            """,
-            (task_id,),
-        )
-
-    else:
-
-        cursor.execute(
-            """
-            UPDATE tasks
-            SET
-                progress = ?,
-                completed = 0
-            WHERE id = ?
-            """,
-            (
-                progress,
-                task_id,
-            ),
-        )
+    cursor.execute(
+        """
+        UPDATE tasks
+        SET
+            progress = ?,
+            completed = ?
+        WHERE id = ?
+        """,
+        (
+            progress,
+            completed,
+            task_id,
+        ),
+    )
 
     conn.commit()
     conn.close()
@@ -333,42 +294,32 @@ def update_progress(
 # =====================================
 
 def complete_task(task_id):
-    """課題を100%・完了状態にする"""
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        UPDATE tasks
-        SET
-            progress = 100,
-            completed = 1
-        WHERE id = ?
-        """,
-        (task_id,),
+    update_progress(
+        task_id,
+        100,
     )
-
-    conn.commit()
-    conn.close()
 
 
 # =====================================
-# 完了を取り消す
+# 完了を戻す
 # =====================================
 
 def restore_task(task_id):
-    """完了済み課題を未完了に戻す"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
+    # 誤って完了した場合を想定し、
+    # 100% → 90% に戻す
     cursor.execute(
         """
         UPDATE tasks
         SET
             completed = 0,
-            progress = 0
+            progress =
+                CASE
+                    WHEN progress >= 100 THEN 90
+                    ELSE progress
+                END
         WHERE id = ?
         """,
         (task_id,),
@@ -379,12 +330,10 @@ def restore_task(task_id):
 
 
 # =====================================
-# 課題削除
+# 削除
 # =====================================
 
 def delete_task(task_id):
-    """課題を完全に削除する"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -401,12 +350,10 @@ def delete_task(task_id):
 
 
 # =====================================
-# 曜日別空き時間取得
+# 曜日別空き時間
 # =====================================
 
 def get_weekly_settings():
-    """曜日ごとの空き時間設定を取得する"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -429,21 +376,11 @@ def get_weekly_settings():
     return settings
 
 
-# =====================================
-# 曜日別空き時間保存
-# =====================================
-
 def save_weekly_settings(settings):
-    """曜日ごとの空き時間を保存する"""
-
     conn = get_connection()
     cursor = conn.cursor()
 
-    for (
-        weekday,
-        minutes,
-    ) in settings.items():
-
+    for weekday, minutes in settings.items():
         cursor.execute(
             """
             INSERT INTO weekly_settings (
@@ -462,6 +399,79 @@ def save_weekly_settings(settings):
                 minutes,
             ),
         )
+
+    conn.commit()
+    conn.close()
+
+
+# =====================================
+# 特定日の空き時間
+# =====================================
+
+def get_date_overrides():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            date,
+            available_minutes
+        FROM date_overrides
+        ORDER BY date
+        """
+    )
+
+    overrides = dict(
+        cursor.fetchall()
+    )
+
+    conn.close()
+
+    return overrides
+
+
+def save_date_override(
+    date,
+    available_minutes,
+):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO date_overrides (
+            date,
+            available_minutes
+        )
+        VALUES (?, ?)
+
+        ON CONFLICT(date)
+        DO UPDATE SET
+            available_minutes =
+            excluded.available_minutes
+        """,
+        (
+            date,
+            available_minutes,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def delete_date_override(date):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        DELETE FROM date_overrides
+        WHERE date = ?
+        """,
+        (date,),
+    )
 
     conn.commit()
     conn.close()
