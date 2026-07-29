@@ -220,7 +220,6 @@ def get_task_metrics(
 # =====================================
 # 推薦スコア
 # =====================================
-
 def calculate_score(
     task,
     all_tasks,
@@ -228,7 +227,7 @@ def calculate_score(
     weekly_available_minutes,
 ):
     """
-    おすすめ度を0〜100点で計算する
+    おすすめ度と内訳を計算する
     """
 
     (
@@ -246,46 +245,51 @@ def calculate_score(
         weekly_available_minutes,
     )
 
-    remaining_hours = (
-        metrics["remaining_hours"]
-    )
+    remaining_hours = metrics[
+        "remaining_hours"
+    ]
 
-    workload_ratio = (
-        metrics["workload_ratio"]
-    )
+    workload_ratio = metrics[
+        "workload_ratio"
+    ]
 
-    slack_minutes = (
-        metrics["slack_minutes"]
-    )
+    slack_minutes = metrics[
+        "slack_minutes"
+    ]
 
-    task_remaining_minutes = (
-        metrics[
-            "task_remaining_minutes"
-        ]
-    )
+    task_remaining_minutes = metrics[
+        "task_remaining_minutes"
+    ]
 
+    # =========================
     # 締切超過
-    if remaining_hours <= 0:
-        return 100
+    # =========================
 
-    # -------------------------
+    if remaining_hours <= 0:
+
+        return {
+            "total": 100,
+            "urgency": 30,
+            "risk": 50,
+            "fit": 20,
+        }
+
+    # =========================
     # 1. 締切の近さ
     # 最大30点
-    # -------------------------
+    # =========================
 
     one_week_hours = 24 * 7
 
     urgency_score = max(
         0,
-        1
-        - remaining_hours
-        / one_week_hours,
+        1 - remaining_hours / one_week_hours,
     ) * 30
 
-    # -------------------------
+    # =========================
     # 2. 時間不足リスク
     # 最大50点
-    # -------------------------
+    # =========================
 
     if slack_minutes < 0:
 
@@ -298,10 +302,10 @@ def calculate_score(
             1,
         ) * 50
 
-    # -------------------------
-    # 3. 今の時間との相性
+    # =========================
+    # 3. 今の空き時間との相性
     # 最大20点
-    # -------------------------
+    # =========================
 
     if task_remaining_minutes > 0:
 
@@ -315,9 +319,11 @@ def calculate_score(
 
         fit_ratio = 1
 
-    fit_score = (
-        fit_ratio * 20
-    )
+    fit_score = fit_ratio * 20
+
+    # =========================
+    # 合計
+    # =========================
 
     total_score = (
         urgency_score
@@ -325,12 +331,20 @@ def calculate_score(
         + fit_score
     )
 
-    return round(
-        min(
-            total_score,
-            100,
-        )
-    )
+    return {
+        "total": round(
+            min(total_score, 100)
+        ),
+        "urgency": round(
+            urgency_score
+        ),
+        "risk": round(
+            risk_score
+        ),
+        "fit": round(
+            fit_score
+        ),
+    }
 
 
 # =====================================
@@ -510,13 +524,14 @@ def recommend_tasks(
         )
 
         results.append(
-            {
-                "task": task,
-                "score": score,
-                "reasons": reasons,
-                "metrics": metrics,
-            }
-        )
+    {
+        "task": task,
+        "score": score["total"],
+        "score_details": score,
+        "reasons": reasons,
+        "metrics": metrics,
+    }
+)
 
     results.sort(
         key=lambda result:
