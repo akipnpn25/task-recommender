@@ -1,0 +1,25 @@
+[theme]
+base = "light"
+
+primaryColor = "#7A6252"
+backgroundColor = "#F7F3EC"
+secondaryBackgroundColor = "#EFE7DC"
+textColor = "#3D3834"
+
+font = "'Noto Sans JP':https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600&display=swap"
+
+headingFont = "'Zen Maru Gothic':https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&display=swap"
+
+baseFontSize = 16
+
+baseRadius = "1rem"
+buttonRadius = "1rem"
+
+borderColor = "#DED3C6"
+showWidgetBorder = true
+
+[theme.sidebar]
+backgroundColor = "#EEE7DE"
+secondaryBackgroundColor = "#E5DCCF"
+textColor = "#3D3834"
+primaryColor = "#7A6252"

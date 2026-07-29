@@ -19,7 +19,21 @@ from db import (
     save_date_override,
     delete_date_override,
 )
-
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background:
+            linear-gradient(
+                180deg,
+                #FBF9F5 0%,
+                #F4EEE6 100%
+            );
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # =====================================
 # 便利関数
@@ -167,28 +181,28 @@ def render_progress_popover(
 
                 st.rerun()
 
-        if st.button(
-            "✅ 終わった！",
-            key=(
-                f"{key_prefix}_"
-                f"finish_{task_id}"
-            ),
-            use_container_width=True,
-        ):
+        # -------------------------
+        # 完了
+        # -------------------------
 
-            complete_task(
-                task_id
-            )
+                if st.button(
+                    "✓ 終わった！",
+                    key=(
+                        f"complete_"
+                        f"{task_id}"
+                    ),
+                    use_container_width=True,
+                ):
 
-            st.session_state[
-                "message"
-            ] = (
-                f"「{title}」完了！🎉"
-            )
+                    complete_task(
+                        task_id
+                    )
 
-            st.rerun()
+                    st.session_state[
+                        "celebrate_task"
+                    ] = title
 
-
+                    st.rerun()
 # =====================================
 # 初期設定
 # =====================================
@@ -205,8 +219,11 @@ st.title(
 )
 
 st.caption(
-    "空き時間・締切・残り作業量から、"
-    "今取り組むべき課題をおすすめします。"
+    "今日やることを、迷わず決める。"
+)
+st.write(
+    "締切・残り作業量・空き時間から、"
+    "今取り組む課題をおすすめします。"
 )
 
 
@@ -220,6 +237,26 @@ if "message" in st.session_state:
         st.session_state.pop(
             "message"
         )
+    )
+# =====================================
+# 課題完了のお祝い
+# =====================================
+
+if "celebrate_task" in st.session_state:
+
+    completed_title = (
+        st.session_state.pop(
+            "celebrate_task"
+        )
+    )
+
+    st.balloons()
+
+    st.toast(
+        f"「{completed_title}」完了！"
+        " ひとつ片づいたね ☕",
+        icon="🎉",
+        duration="long",
     )
 
 
@@ -504,14 +541,16 @@ task_time_options = {
 # タブ
 # =====================================
 
-recommend_tab, tasks_tab, add_tab = (
-    st.tabs(
-        [
-            "🔥 おすすめ",
-            "📋 課題一覧",
-            "➕ 課題追加",
-        ]
-    )
+page = st.segmented_control(
+    "ページ",
+    options=[
+        "☕ 今日",
+        "📚 課題一覧",
+        "＋ 課題を追加",
+    ],
+    default="☕ 今日",
+    selection_mode="single",
+    label_visibility="collapsed",
 )
 
 
@@ -519,7 +558,7 @@ recommend_tab, tasks_tab, add_tab = (
 # おすすめタブ
 # =====================================
 
-with recommend_tab:
+if page == "☕ 今日":
 
     st.subheader(
         "今やるなら？"
@@ -912,7 +951,6 @@ with recommend_tab:
                 ),
             )
         )
-
         if (
             selected_label
             is not None
@@ -943,10 +981,14 @@ with recommend_tab:
 
                 st.rerun()
 
+        # -------------------------
+        # 完了
+        # -------------------------
+
         if st.button(
-            "✅ 終わった！",
+            "✓ 終わった！",
             key=(
-                "recommend_finish_"
+                f"recommend_finish_"
                 f"{best_task_id}"
             ),
             use_container_width=True,
@@ -957,13 +999,10 @@ with recommend_tab:
             )
 
             st.session_state[
-                "message"
-            ] = (
-                f"「{best_title}」完了！🎉"
-            )
+                "celebrate_task"
+            ] = best_title
 
             st.rerun()
-
         # =========================
         # 2位・3位
         # =========================
@@ -1108,7 +1147,7 @@ with recommend_tab:
 # 課題一覧タブ
 # =====================================
 
-with tasks_tab:
+elif page == "📚 課題一覧":
 
     st.subheader(
         f"未完了の課題"
@@ -1706,7 +1745,7 @@ with tasks_tab:
 # 課題追加タブ
 # =====================================
 
-with add_tab:
+elif page == "＋ 課題を追加":
 
     st.subheader(
         "新しい課題を追加"
