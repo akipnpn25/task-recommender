@@ -263,39 +263,63 @@ def render_today(
     weekly_available_minutes,
     date_overrides,
 ):
-    st.subheader(
-        "今やるなら？"
-    )
-
     # =====================================
     # 今使える時間
     # =====================================
 
-    available_options = {
-        "15分": 15,
-        "30分": 30,
-        "45分": 45,
-        "1時間": 60,
-        "1時間30分": 90,
-        "2時間": 120,
-        "3時間": 180,
-    }
+    with st.container(
+        border=True
+    ):
+        st.markdown(
+            '<div class="section-kicker">'
+            'NOW'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-    available_label = st.radio(
-        "今どれくらい時間がありますか？",
-        list(
-            available_options.keys()
-        ),
-        index=3,
-        horizontal=True,
-        key="available_time",
-    )
+        st.markdown(
+            '<div class="section-heading">'
+            '☕ 今どれくらい時間がありますか？'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
-    available_minutes = (
-        available_options[
-            available_label
-        ]
-    )
+        st.markdown(
+            '<div class="section-description">'
+            '今使える時間に合わせて、'
+            '取り組みやすい課題をおすすめします。'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        available_options = {
+            "15分": 15,
+            "30分": 30,
+            "45分": 45,
+            "1時間": 60,
+            "1時間30分": 90,
+            "2時間": 120,
+            "3時間": 180,
+        }
+
+        available_label = (
+            st.radio(
+                "今使える時間",
+                list(
+                    available_options.keys()
+                ),
+                index=3,
+                horizontal=True,
+                key="available_time",
+                label_visibility="collapsed",
+            )
+        )
+
+        available_minutes = (
+            available_options[
+                available_label
+            ]
+        )
 
     if not tasks:
         st.info(
@@ -303,37 +327,41 @@ def render_today(
             "おすすめが表示されます。"
         )
         return
+
+    st.write("")
+
     # =====================================
-    # 今週の見通し
+    # 今週の課題全体
     # =====================================
 
-    render_week_outlook(
-        tasks,
-        available_minutes,
-        weekly_available_minutes,
-        date_overrides,
-    )
+    with st.container(
+        border=True
+    ):
+        render_week_outlook(
+            tasks,
+            available_minutes,
+            weekly_available_minutes,
+            date_overrides,
+        )
 
-    st.divider()
+    st.write("")
 
     # =====================================
     # 推薦
     # =====================================
 
-    recommendations = recommend_tasks(
-        tasks,
-        available_minutes,
-        weekly_available_minutes,
-        date_overrides,
+    recommendations = (
+        recommend_tasks(
+            tasks,
+            available_minutes,
+            weekly_available_minutes,
+            date_overrides,
+        )
     )
 
     top_recommendations = (
         recommendations[:3]
     )
-
-    # =====================================
-    # 1位
-    # =====================================
 
     best = (
         top_recommendations[0]
@@ -393,323 +421,462 @@ def render_today(
             "task_remaining_minutes"
         ]
     )
-    with st.container(
-    border=True
-):
-        st.markdown(
-        f"## 🥇 {status_title}"
-    )
-
-    st.markdown(
-    f"""
-    <div style="
-        background: #FFFDF9;
-        border: 1px solid #CDB9A7;
-        border-left: 6px solid #8C745F;
-        border-radius: 16px;
-        padding: 18px 20px;
-        margin: 10px 0 16px 0;
-        box-shadow:
-            0 3px 12px
-            rgba(83, 64, 48, 0.06);
-    ">
-        <div style="
-            font-size: 21px;
-            font-weight: 700;
-            color: #403832;
-        ">
-            {best_title}
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-    st.caption(
-        "📅 締切："
-        f"{best_deadline_dt.strftime('%m/%d %H:%M')}"
-    )
-
-    if remaining_hours > 0:
-        if remaining_hours < 24:
-            st.caption(
-                "⏰ 締切まで約"
-                f"{max(1, round(remaining_hours))}時間"
-            )
-
-        else:
-            st.caption(
-                "📅 締切まで約"
-                f"{round(remaining_hours / 24, 1)}日"
-            )
-
-    st.write(
-        status_message
-    )
 
     # =====================================
-    # 進捗
+    # 状態の色
     # =====================================
 
-    st.write(
-        f"**現在の進捗："
-        f"{best_progress}%**"
-    )
+    if "締切超過" in status_title:
 
-    st.progress(
-        best_progress / 100
-    )
-
-    st.caption(
-        "この課題の残り："
-        f"約{format_minutes(remaining_minutes)}"
-    )
-
-    # =====================================
-    # 締切までの見通し
-    # =====================================
-    st.markdown(
-    """
-    <div class="section-title">
-        締切までの見通し
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-    col1, col2, col3 = (
-    st.columns(3)
-)
-
-    with col1:
-        st.metric(
-            "使える時間",
-            format_minutes(
-                available_until_deadline
-            ),
+        status_class = (
+            "status-danger"
         )
 
-    with col2:
-        st.metric(
-            "必要時間",
-            format_minutes(
-                required_until_deadline
-            ),
-        )
-
-    with col3:
-        if slack_minutes < 0:
-            st.metric(
-                "不足",
-                format_minutes(
-                    abs(slack_minutes)
-                ),
-            )
-
-        else:
-            st.metric(
-                "余裕",
-                format_minutes(
-                    slack_minutes
-                ),
-            )
-
-    st.caption(
-        "※必要時間は、この課題と"
-        "それ以前が締切の課題の"
-        "残り作業時間の合計です。"
-    )
-    # =====================================
-    # おすすめ理由
-    # =====================================
-
-    reason_html = "".join(
-        f'<div class="reason-item">・{reason}</div>'
-        for reason in best["reasons"]
-    )
-
-    st.markdown(
-        (
-            '<div class="reason-box">'
-            '<div class="reason-title">'
-            '🌿 おすすめ理由'
-            '</div>'
-            f'{reason_html}'
-            '</div>'
-        ),
-        unsafe_allow_html=True,
-    )
-
-    # =====================================
-    # 推薦スコア
-    # =====================================
-
-    with st.expander(
-        "💡 なぜこの課題が1位？"
+    elif (
+        "今すぐ" in status_title
+        or "今から" in status_title
     ):
-        score_details = (
-            best[
-                "score_details"
-            ]
+
+        status_class = (
+            "status-urgent"
         )
 
-        st.write(
-            "**総合おすすめ度："
-            f"{best['score']} / 100**"
+    elif "そろそろ" in status_title:
+
+        status_class = (
+            "status-warning"
         )
 
-        st.write(
-            "締切の近さ"
-        )
+    else:
 
-        st.progress(
-            score_details[
-                "urgency"
-            ] / 30
-        )
-
-        st.caption(
-            f"{score_details['urgency']} / 30点"
-        )
-
-        st.write(
-            "時間不足のリスク"
-        )
-
-        st.progress(
-            score_details[
-                "risk"
-            ] / 50
-        )
-
-        st.caption(
-            f"{score_details['risk']} / 50点"
-        )
-
-        st.write(
-            "今の空き時間との相性"
-        )
-
-        st.progress(
-            score_details[
-                "fit"
-            ] / 20
-        )
-
-        st.caption(
-            f"{score_details['fit']} / 20点"
+        status_class = (
+            "status-safe"
         )
 
     # =====================================
-    # 1位の進捗更新
+    # 1位
     # =====================================
-    st.divider()
+
     with st.container(
-    border=True
-):
+        border=True
+    ):
         st.markdown(
-        """
-        <div class="progress-box-title">
-            ☕ どのくらい進みましたか？
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    progress_options = {
-        "1割": 10,
-        "2割": 20,
-        "3割": 30,
-        "4割": 40,
-        "5割": 50,
-        "6割": 60,
-        "7割": 70,
-        "8割": 80,
-        "9割": 90,
-    }
-
-    selected_label = (
-        st.segmented_control(
-            "進捗",
-            options=list(
-                progress_options.keys()
-            ),
-            selection_mode="single",
-            key=(
-                "recommend_progress_"
-                f"{best_task_id}"
-            ),
-            width="stretch",
-            label_visibility=(
-                "collapsed"
-            ),
+            '<div class="today-pick-label">'
+            "TODAY'S PICK"
+            '</div>',
+            unsafe_allow_html=True,
         )
-    )
 
-    if selected_label is not None:
-        new_progress = (
-            progress_options[
-                selected_label
+        st.markdown(
+            (
+                '<div class="today-pick-title">'
+                f'🥇 1位　{best_title}'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+                # -------------------------
+        # 締切・残り時間
+        # -------------------------
+
+        if remaining_hours > 0:
+
+            if remaining_hours < 24:
+
+                deadline_text = (
+                    "あと約"
+                    f"{max(1, round(remaining_hours))}"
+                    "時間"
+                )
+
+            else:
+
+                deadline_text = (
+                    "あと約"
+                    f"{round(remaining_hours / 24, 1)}"
+                    "日"
+                )
+
+        else:
+
+            deadline_text = (
+                "締切を過ぎています"
+            )
+
+
+        info_col1, info_col2 = (
+            st.columns(
+                2,
+                gap="medium",
+            )
+        )
+
+
+        with info_col1:
+
+            st.markdown(
+                (
+                    '<div class="task-info-card">'
+                    '<div class="task-info-label">'
+                    '📅 締切'
+                    '</div>'
+                    '<div class="task-info-value">'
+                    f'{best_deadline_dt.strftime("%m/%d %H:%M")}'
+                    '</div>'
+                    '<div class="task-info-sub">'
+                    f'{deadline_text}'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+
+        with info_col2:
+
+            st.markdown(
+                (
+                    '<div class="task-info-card">'
+                    '<div class="task-info-label">'
+                    '⏱️ この課題の残り'
+                    '</div>'
+                    '<div class="task-info-value">'
+                    f'{format_minutes(remaining_minutes)}'
+                    '</div>'
+                    '<div class="task-info-sub">'
+                    f'進捗 {best_progress}%'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+        # -------------------------
+        # 状態
+        # -------------------------
+
+        st.markdown(
+            (
+                f'<div class="status-pill '
+                f'{status_class}">'
+                f'{status_title}'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+        st.caption(
+            status_message
+        )
+
+        st.write("")
+
+        # -------------------------
+        # 進捗
+        # -------------------------
+
+        st.markdown(
+            f"**現在の進捗　{best_progress}%**"
+        )
+
+        st.progress(
+            best_progress / 100
+        )
+
+        st.write("")
+
+        # -------------------------
+        # 締切までの見通し
+        # -------------------------
+
+        st.markdown(
+            '<div class="section-kicker">'
+            'SCHEDULE'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            '<div class="section-heading">'
+            '締切までの見通し'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        col1, col2, col3 = (
+            st.columns(3)
+        )
+
+        with col1:
+
+            st.metric(
+                "使える時間",
+                format_minutes(
+                    available_until_deadline
+                ),
+            )
+
+        with col2:
+
+            st.metric(
+                "必要時間",
+                format_minutes(
+                    required_until_deadline
+                ),
+            )
+
+        with col3:
+
+            if slack_minutes < 0:
+
+                st.metric(
+                    "不足",
+                    format_minutes(
+                        abs(
+                            slack_minutes
+                        )
+                    ),
+                )
+
+            else:
+
+                st.metric(
+                    "余裕",
+                    format_minutes(
+                        slack_minutes
+                    ),
+                )
+
+        st.caption(
+            "必要時間は、この課題と"
+            "それ以前に締切がある課題の"
+            "残り作業時間の合計です。"
+        )
+
+        # -------------------------
+        # おすすめ理由
+        # -------------------------
+
+        reason_html = "".join(
+            (
+                '<div class="reason-item">'
+                f'・{reason}'
+                '</div>'
+            )
+            for reason in best[
+                "reasons"
             ]
+        )
+
+        st.markdown(
+            (
+                '<div class="reason-box">'
+                '<div class="reason-title">'
+                '🌿 おすすめ理由'
+                '</div>'
+                f'{reason_html}'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+        # -------------------------
+        # 推薦スコア
+        # -------------------------
+
+        with st.expander(
+            "💡 なぜこの課題が1位？"
+        ):
+            score_details = (
+                best[
+                    "score_details"
+                ]
+            )
+
+            st.markdown(
+                "**総合おすすめ度："
+                f"{best['score']} / 100**"
+            )
+
+            st.write(
+                "締切の近さ"
+            )
+
+            st.progress(
+                score_details[
+                    "urgency"
+                ] / 30
+            )
+
+            st.caption(
+                f"{score_details['urgency']} / 30点"
+            )
+
+            st.write(
+                "時間不足のリスク"
+            )
+
+            st.progress(
+                score_details[
+                    "risk"
+                ] / 50
+            )
+
+            st.caption(
+                f"{score_details['risk']} / 50点"
+            )
+
+            st.write(
+                "今の空き時間との相性"
+            )
+
+            st.progress(
+                score_details[
+                    "fit"
+                ] / 20
+            )
+
+            st.caption(
+                f"{score_details['fit']} / 20点"
+            )
+
+    # =====================================
+    # 進捗更新
+    # =====================================
+
+    st.write("")
+
+    with st.container(
+        border=True
+    ):
+        st.markdown(
+            '<div class="section-kicker">'
+            'PROGRESS'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            '<div class="section-heading">'
+            '☕ 今日どのくらい進んだ？'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.caption(
+            "進んだ割合を選ぶと、"
+            "残り作業時間とおすすめ順位を更新します。"
+        )
+
+        progress_options = {
+            "1割": 10,
+            "2割": 20,
+            "3割": 30,
+            "4割": 40,
+            "5割": 50,
+            "6割": 60,
+            "7割": 70,
+            "8割": 80,
+            "9割": 90,
+        }
+
+        selected_label = (
+            st.segmented_control(
+                "進捗",
+                options=list(
+                    progress_options.keys()
+                ),
+                selection_mode="single",
+                key=(
+                    "recommend_progress_"
+                    f"{best_task_id}"
+                ),
+                width="stretch",
+                label_visibility=(
+                    "collapsed"
+                ),
+            )
         )
 
         if (
-            new_progress
-            != best_progress
+            selected_label
+            is not None
         ):
-            update_progress(
-                best_task_id,
-                new_progress,
+            new_progress = (
+                progress_options[
+                    selected_label
+                ]
+            )
+
+            if (
+                new_progress
+                != best_progress
+            ):
+                update_progress(
+                    best_task_id,
+                    new_progress,
+                )
+
+                st.session_state[
+                    "message"
+                ] = (
+                    f"「{best_title}」の進捗を"
+                    f"{selected_label}に更新しました。"
+                )
+
+                st.rerun()
+
+        if st.button(
+            "✓ この課題を完了する",
+            key=(
+                "recommend_finish_"
+                f"{best_task_id}"
+            ),
+            use_container_width=True,
+        ):
+            complete_task(
+                best_task_id
             )
 
             st.session_state[
-                "message"
-            ] = (
-                f"「{best_title}」の進捗を"
-                f"{selected_label}に更新しました。"
-            )
+                "celebrate_task"
+            ] = best_title
 
             st.rerun()
-
-    # =====================================
-    # 1位を完了
-    # =====================================
-
-    if st.button(
-        "✓ 終わった！",
-        key=(
-            "recommend_finish_"
-            f"{best_task_id}"
-        ),
-        use_container_width=True,
-    ):
-        complete_task(
-            best_task_id
-        )
-
-        st.session_state[
-            "celebrate_task"
-        ] = best_title
-
-        st.rerun()
 
     # =====================================
     # 2位・3位
     # =====================================
 
-    if len(
-        top_recommendations
-    ) >= 2:
-        st.divider()
+    if (
+        len(
+            top_recommendations
+        )
+        >= 2
+    ):
+        st.write("")
+        st.write("")
 
-        st.subheader(
-            "他のおすすめ"
+        st.markdown(
+            '<div class="section-kicker">'
+            'NEXT'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            '<div class="section-heading">'
+            '他のおすすめ'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
         for (
             rank,
             recommendation,
         ) in enumerate(
-            top_recommendations[1:],
+            top_recommendations[
+                1:
+            ],
             start=2,
         ):
             (
@@ -756,7 +923,7 @@ def render_today(
                 border=True
             ):
                 st.markdown(
-                    f"#### {medal} "
+                    f"### {medal} "
                     f"{rank}位　{title}"
                 )
 
@@ -765,23 +932,41 @@ def render_today(
                 )
 
                 with col1:
+
+                    st.caption(
+                        "締切"
+                    )
+
                     st.write(
-                        "📅 "
-                        f"{deadline_dt.strftime('%m/%d %H:%M')}"
+                        deadline_dt.strftime(
+                            "%m/%d %H:%M"
+                        )
                     )
 
                 with col2:
+
+                    st.caption(
+                        "残り"
+                    )
+
                     st.write(
-                        "⏱️ "
-                        f"{format_minutes(task_remaining)}"
+                        format_minutes(
+                            task_remaining
+                        )
                     )
 
                 with col3:
+
+                    st.caption(
+                        "進捗"
+                    )
+
                     st.write(
-                        f"📈 {progress}%"
+                        f"{progress}%"
                     )
 
                 if task_slack < 0:
+
                     st.warning(
                         "締切までに約"
                         f"{format_minutes(abs(task_slack))}"
@@ -798,7 +983,7 @@ def render_today(
                 )
 
                 with st.expander(
-                    "おすすめ理由"
+                    "おすすめ理由を見る"
                 ):
                     st.write(
                         "おすすめ度："

@@ -42,45 +42,143 @@ with st.container(
         background:
             linear-gradient(
                 180deg,
-                #FBF8F3 0%,
-                #F4EEE5 100%
+                #FAF7F2 0%,
+                #F3ECE3 100%
             );
+        color: #342F2B;
     }
 
-    /* 横幅を少し整える */
     .block-container {
-        max-width: 1000px;
+        max-width: 980px;
         padding-top: 2rem;
-        padding-bottom: 4rem;
+        padding-bottom: 5rem;
     }
 
 
     /* =====================================
-       Streamlitのborder付きコンテナ
+       見出し
+    ===================================== */
+
+    h1, h2, h3 {
+        color: #342F2B;
+        letter-spacing: -0.02em;
+    }
+
+    .section-kicker {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: #8B7563;
+        margin-bottom: 4px;
+    }
+
+    .section-heading {
+        font-size: 20px;
+        font-weight: 700;
+        color: #3E3732;
+        margin-bottom: 6px;
+    }
+
+    .section-description {
+        font-size: 13px;
+        color: #7A7068;
+        margin-bottom: 14px;
+        line-height: 1.7;
+    }
+
+
+    /* =====================================
+       border=True のカード
     ===================================== */
 
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background: rgba(
-            255,
-            253,
-            249,
-            0.92
-        );
-
-        border: 1px solid #D9C9B9 !important;
-
-        border-radius: 18px !important;
+        background: rgba(255, 253, 250, 0.97);
+        border: 1px solid #DCCFC2 !important;
+        border-radius: 20px !important;
 
         box-shadow:
-            0 4px 14px
-            rgba(
-                83,
-                64,
-                48,
-                0.07
-            );
+            0 6px 20px
+            rgba(67, 52, 40, 0.07);
 
-        padding: 4px;
+        padding: 6px;
+    }
+
+
+    /* =====================================
+       1位カード
+    ===================================== */
+
+    .today-pick-label {
+        display: inline-block;
+
+        background: #EAE2D8;
+        color: #725D4D;
+
+        border-radius: 999px;
+
+        padding: 5px 11px;
+
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+
+        margin-bottom: 7px;
+    }
+
+    .today-pick-title {
+        font-size: 26px;
+        font-weight: 750;
+        color: #302B27;
+
+        margin-top: 3px;
+        margin-bottom: 5px;
+
+        line-height: 1.45;
+    }
+
+    .today-pick-meta {
+        color: #756A62;
+        font-size: 14px;
+        margin-bottom: 4px;
+    }
+
+
+    /* =====================================
+       状態バッジ
+    ===================================== */
+
+    .status-pill {
+        display: inline-block;
+
+        border-radius: 999px;
+
+        padding: 7px 13px;
+
+        font-size: 13px;
+        font-weight: 700;
+
+        margin-top: 10px;
+        margin-bottom: 6px;
+    }
+
+    .status-safe {
+        background: #E5EEE1;
+        color: #506047;
+    }
+
+    .status-warning {
+        background: #F4E7C8;
+        color: #755F35;
+    }
+
+    .status-urgent {
+        background: #F1DDD2;
+        color: #7D4E3D;
+    }
+
+    .status-danger {
+        background: #EBCFCB;
+        color: #873C36;
     }
 
 
@@ -89,32 +187,120 @@ with st.container(
     ===================================== */
 
     div[data-testid="stMetric"] {
-        background: #FFFDF9;
+        background: #F8F4EF;
 
-        border: 1px solid #DDD0C3;
+        border: 1px solid #E3D8CC;
 
-        border-radius: 14px;
+        border-radius: 15px;
 
-        padding: 14px 16px;
+        padding: 14px 15px;
 
-        box-shadow:
-            0 2px 8px
-            rgba(
-                83,
-                64,
-                48,
-                0.05
-            );
+        min-height: 100px;
     }
 
     div[data-testid="stMetricLabel"] {
-        color: #76685D;
-        font-weight: 500;
+        color: #766B62;
+        font-weight: 600;
     }
 
     div[data-testid="stMetricValue"] {
-        color: #3F3833;
-        font-weight: 700;
+        color: #352F2B;
+        font-weight: 750;
+    }
+
+
+    /* =====================================
+       おすすめ理由
+    ===================================== */
+
+    .reason-box {
+        background: #EEF2E9;
+
+        border: 1px solid #CDD6C5;
+        border-left: 5px solid #7F9073;
+
+        border-radius: 16px;
+
+        padding: 17px 19px;
+
+        margin-top: 14px;
+        margin-bottom: 14px;
+    }
+
+    .reason-title {
+        color: #495440;
+        font-size: 15px;
+        font-weight: 750;
+        margin-bottom: 8px;
+    }
+
+    .reason-item {
+        color: #45423D;
+        font-size: 14px;
+        line-height: 1.7;
+        margin-top: 5px;
+    }
+
+
+    /* =====================================
+       今週の見通し
+    ===================================== */
+
+    .week-outlook-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+
+        margin-top: 12px;
+        margin-bottom: 12px;
+    }
+
+    .outlook-card {
+        border-radius: 14px;
+
+        padding: 11px 5px;
+
+        text-align: center;
+
+        border: 1px solid
+            rgba(90, 70, 55, 0.10);
+    }
+
+    .outlook-safe {
+        background: #E7EFE3;
+    }
+
+    .outlook-warning {
+        background: #F3E4BF;
+    }
+
+    .outlook-shortage {
+        background: #EED3CE;
+    }
+
+    .outlook-date {
+        font-size: 12px;
+        font-weight: 650;
+        color: #5D544D;
+    }
+
+    .outlook-weekday {
+        font-size: 11px;
+        color: #897C72;
+        margin-top: 2px;
+    }
+
+    .outlook-symbol {
+        font-size: 26px;
+        font-weight: 750;
+        color: #38322E;
+        line-height: 1.3;
+        margin-top: 3px;
+    }
+
+    .outlook-label {
+        font-size: 10px;
+        color: #615952;
     }
 
 
@@ -123,11 +309,11 @@ with st.container(
     ===================================== */
 
     div[data-testid="stExpander"] {
-        background: #FFFDF9;
+        background: #FBF8F4;
 
-        border: 1px solid #D9C9B9;
+        border: 1px solid #DED2C7;
 
-        border-radius: 14px;
+        border-radius: 15px;
     }
 
 
@@ -138,88 +324,90 @@ with st.container(
     .stButton > button {
         background: #FFFDF9;
 
-        border: 1px solid #CDB9A7;
+        color: #493E36;
 
-        color: #453C35;
+        border: 1px solid #CBB7A5;
 
         border-radius: 14px;
 
-        min-height: 42px;
+        min-height: 43px;
 
-        transition:
-            all 0.15s ease;
+        font-weight: 600;
+
+        transition: 0.15s ease;
     }
 
     .stButton > button:hover {
-        background: #EEE4D9;
+        background: #EDE3D8;
 
-        border-color: #9D806A;
+        color: #332B26;
 
-        color: #342D28;
+        border-color: #9A7B64;
+
+        transform: translateY(-1px);
     }
 
 
     /* =====================================
-       進捗バー
+       スマホ
     ===================================== */
 
-    div[data-testid="stProgress"] > div > div {
-        border-radius: 999px;
+    @media (max-width: 700px) {
+
+        .block-container {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
+        .week-outlook-grid {
+            grid-template-columns:
+                repeat(4, 1fr);
+        }
+
+        .today-pick-title {
+            font-size: 22px;
+        }
     }
-
-
     /* =====================================
-       自作セクション
-    ===================================== */
+   1位の締切・残り時間カード
+===================================== */
 
-    .section-title {
-        font-size: 18px;
-        font-weight: 700;
-        color: #453C35;
-        margin-bottom: 8px;
-    }
+.task-info-card {
+    background: #FFFDF9;
+    border: 1px solid #D8C8B8;
+    border-radius: 16px;
+    padding: 18px 20px;
+    min-height: 125px;
 
-    .reason-box {
-        background: #F0F3EB;
+    box-shadow:
+        0 3px 10px
+        rgba(67, 52, 40, 0.05);
+}
 
-        border: 1px solid #C9D2BF;
+.task-info-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: #76675C;
+    margin-bottom: 12px;
+}
 
-        border-left:
-            5px solid #829176;
+.task-info-value {
+    font-size: 25px;
+    font-weight: 700;
+    color: #352F2B;
+    line-height: 1.3;
+}
 
-        border-radius: 16px;
-
-        padding: 18px 20px;
-
-        margin-top: 10px;
-        margin-bottom: 18px;
-    }
-
-    .reason-title {
-        font-size: 16px;
-        font-weight: 700;
-        color: #48513F;
-        margin-bottom: 12px;
-    }
-
-    .reason-item {
-        color: #48433E;
-        margin: 8px 0;
-        line-height: 1.7;
-    }
-
-    .progress-box-title {
-        font-size: 18px;
-        font-weight: 700;
-        color: #453C35;
-        margin-bottom: 4px;
-    }
+.task-info-sub {
+    font-size: 13px;
+    color: #91857B;
+    margin-top: 10px;
+}
 
     </style>
     """,
     unsafe_allow_html=True,
 )
-
 
 # =====================================
 # 初期化
