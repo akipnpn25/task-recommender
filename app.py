@@ -1,4 +1,5 @@
 import streamlit as st
+from recommender import recommend_tasks
 
 from datetime import datetime, time
 
@@ -183,3 +184,65 @@ else:
                 delete_task(task_id)
 
                 st.rerun()
+# 今の空き時間
+
+st.divider()
+
+st.subheader("🔥 今やるなら？")
+
+available_options = {
+    "15分": 15,
+    "30分": 30,
+    "1時間": 60,
+    "2時間": 120,
+    "3時間": 180,
+}
+
+available_label = st.radio(
+    "今どれくらい時間がありますか？",
+    list(available_options.keys()),
+    horizontal=True,
+)
+
+available_minutes = available_options[
+    available_label
+]
+
+
+# 推薦結果
+
+if len(tasks) == 0:
+
+    st.info(
+        "課題を登録すると、おすすめを表示します。"
+    )
+
+else:
+
+    recommendations = recommend_tasks(
+        tasks,
+        available_minutes,
+    )
+
+    best = recommendations[0]
+
+    (
+        task_id,
+        title,
+        deadline,
+        estimated_minutes,
+    ) = best["task"]
+
+    st.success(
+        f"今は「{title}」がおすすめ！"
+    )
+
+    st.metric(
+        "おすすめ度",
+        f"{best['score']}点",
+    )
+
+    st.write("**おすすめ理由**")
+
+    for reason in best["reasons"]:
+        st.write(f"・{reason}")
