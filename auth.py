@@ -168,11 +168,7 @@ def save_auth_session(
     auth_response,
     persist_cookie=True,
 ):
-    """
-    Supabaseの認証情報を
-    Session Stateへ保存する。
-    """
-
+    """Supabaseの認証情報をSession Stateへ保存する。"""
     session = getattr(
         auth_response,
         "session",
@@ -185,50 +181,37 @@ def save_auth_session(
         None,
     )
 
-    if (
-        user is None
-        and session is not None
-    ):
+    # refresh_session()などでは、userがsession側にある場合がある。
+    if user is None and session is not None:
         user = getattr(
             session,
             "user",
             None,
         )
 
-    if (
-        session is None
-        or user is None
-    ):
+    if session is None or user is None:
         return False
 
-    st.session_state[
-        "supabase_access_token"
-    ] = session.access_token
-
-    st.session_state[
-        "supabase_refresh_token"
-    ] = session.refresh_token
-
-    st.session_state[
-        "user_id"
-    ] = user.id
-
-    st.session_state[
-        "user_email"
-    ] = user.email
+    st.session_state["supabase_access_token"] = (
+        session.access_token
+    )
+    st.session_state["supabase_refresh_token"] = (
+        session.refresh_token
+    )
+    st.session_state["user_id"] = user.id
+    st.session_state["user_email"] = user.email
 
     if persist_cookie:
         try:
             save_refresh_cookie(
-                session.refresh_token
+                session.refresh_token,
             )
-
         except Exception as error:
-            # Cookie保存に失敗しても、
-            # アカウント作成・ログインは成功扱いにする
+            # Cookie保存だけ失敗しても、
+            # アカウント作成やログイン自体は成功扱いにする。
             print(
-                "[auth] Cookie保存に失敗しました:",
-                error,
+                "[auth] Cookie保存エラー:",
+                repr(error),
             )
 
     return True
@@ -457,7 +440,6 @@ def is_duplicate_signup_error(error):
     duplicate_markers = (
         "already registered",
         "user already registered",
-        "database error saving new user",
         "users_email_partial_key",
         "duplicate key value",
     )
@@ -465,6 +447,25 @@ def is_duplicate_signup_error(error):
     return any(
         marker in error_text
         for marker in duplicate_markers
+    )
+
+
+def is_signup_rate_limit_error(error):
+    """新規登録の回数制限エラーか判定する。"""
+    error_text = str(error).lower()
+
+    rate_limit_markers = (
+        "429",
+        "too many requests",
+        "rate limit",
+        "rate_limit",
+        "over_email_send_rate_limit",
+        "email rate limit exceeded",
+    )
+
+    return any(
+        marker in error_text
+        for marker in rate_limit_markers
     )
 
 
@@ -523,14 +524,14 @@ def render_login_form():
             "ログインできませんでした。"
         )
 
-    except Exception:
+    except Exception as error:
+        print(
+            "[auth] ログインエラー:",
+            repr(error),
+        )
         st.error(
             "メールアドレスまたは"
             "パスワードを確認してください。"
-        )
-        st.info(
-            "新規登録後の場合は、確認メール内の"
-            "リンクを開いてからログインしてください。"
         )
 
 
@@ -539,52 +540,37 @@ def render_login_form():
 # =====================================
 
 def render_signup_form():
-    with st.form(
-        "signup_form"
-    ):
+    with st.form("signup_form"):
         email = st.text_input(
             "メールアドレス",
-            placeholder=(
-                "example@email.com"
-            ),
+            placeholder="example@email.com",
         )
 
         password = st.text_input(
             "パスワード",
             type="password",
-            help=(
-                "6文字以上のパスワードを"
-                "設定してください。"
-            ),
+            help="6文字以上のパスワードを設定してください。",
         )
 
-        password_confirm = (
-            st.text_input(
-                "パスワード（確認）",
-                type="password",
-            )
+        password_confirm = st.text_input(
+            "パスワード（確認）",
+            type="password",
         )
 
-        submitted = (
-            st.form_submit_button(
-                "アカウントを作成",
-                use_container_width=True,
-                type="primary",
-            )
+        submitted = st.form_submit_button(
+            "アカウントを作成して始める",
+            use_container_width=True,
+            type="primary",
         )
 
     if not submitted:
         return
 
-    email = (
-        email.strip()
-        .lower()
-    )
+    email = email.strip().lower()
 
     if not email:
         st.error(
-            "メールアドレスを"
-            "入力してください。"
+            "メールアドレスを入力してください。"
         )
         return
 
@@ -595,120 +581,97 @@ def render_signup_form():
         )
         return
 
-    if (
-        password
-        != password_confirm
-    ):
+    if password != password_confirm:
         st.error(
-            "確認用パスワードが"
-            "一致していません。"
+            "確認用パスワードが一致していません。"
         )
         return
 
-    # =====================================
-    # Supabaseへのアカウント登録
-    # =====================================
-
     try:
-        client = (
-            create_supabase_client()
-        )
-
-        response = (
-            client.auth.sign_up(
-                {
-                    "email": email,
-                    "password": password,
-                }
-            )
+        client = create_supabase_client()
+        response = client.auth.sign_up(
+            {
+                "email": email,
+                "password": password,
+            }
         )
 
     except Exception as error:
-        if is_duplicate_signup_error(
-            error
-        ):
+        print(
+            "[auth] 新規登録エラー:",
+            repr(error),
+        )
+
+        if is_signup_rate_limit_error(error):
+            st.warning(
+                "短時間に新規登録が繰り返されたため、"
+                "一時的に制限されています。"
+            )
+            st.info(
+                "少し時間を空けてから、"
+                "ボタンを1回だけ押してください。"
+                "直前の登録が成功している場合は、"
+                "「ログイン」もお試しください。"
+            )
+            return
+
+        if is_duplicate_signup_error(error):
             st.warning(
                 "このメールアドレスは、"
-                "すでに登録済み、または"
-                "確認待ちの可能性があります。"
+                "すでに登録されています。"
             )
-
             st.info(
                 "「ログイン」に切り替えて"
                 "お試しください。"
             )
-
             return
 
         st.error(
-            "アカウントを"
-            "作成できませんでした。"
-            "時間をおいて、"
-            "もう一度お試しください。"
+            "アカウントを作成できませんでした。"
+            "時間をおいて、もう一度お試しください。"
         )
-
-        print(
-            "[auth] 新規登録エラー:",
-            error,
-        )
-
         return
 
-    # =====================================
-    # ここまで来たらアカウント登録は成功
-    # =====================================
-
+    # Confirm emailがOFFなら、登録成功時にsessionも返る。
     if response.user is None:
         st.error(
             "登録結果を確認できませんでした。"
-            "もう一度ログインを"
-            "お試しください。"
+            "もう一度お試しください。"
         )
         return
 
-    # メール確認が無効の場合は
-    # sessionも返るため、そのままログイン
-    if response.session is not None:
-        login_saved = (
-            save_auth_session(
-                response,
-                persist_cookie=True,
-            )
-        )
-
-        if login_saved:
-            st.session_state[
-                "message"
-            ] = (
-                "アカウントを作成しました ☕"
-            )
-
-            st.rerun()
-
-        # アカウント自体は作成済み
+    if response.session is None:
         st.success(
-            "アカウントは"
-            "作成されています。"
+            "アカウントは作成されました。"
         )
-
+        st.warning(
+            "SupabaseのConfirm emailが"
+            "まだONになっている可能性があります。"
+        )
         st.info(
-            "「ログイン」に切り替えて、"
-            "作成したメールアドレスと"
-            "パスワードでログインしてください。"
+            "管理画面でConfirm emailをOFFにしたあと、"
+            "「ログイン」からお試しください。"
         )
-
         return
 
-    # メール確認が有効の場合
-    st.success(
-        "アカウントを作成しました。"
-    )
+    if not save_auth_session(
+        response,
+        persist_cookie=True,
+    ):
+        st.success(
+            "アカウントは作成されました。"
+        )
+        st.info(
+            "「ログイン」から、作成した"
+            "メールアドレスとパスワードを"
+            "入力してください。"
+        )
+        return
 
-    st.info(
-        "確認メールが届いた場合は、"
-        "メール内のリンクを開いてから"
-        "ログインしてください ☕"
+    st.session_state["message"] = (
+        "アカウントを作成しました ☕"
     )
+    st.rerun()
 
 
 # =====================================
