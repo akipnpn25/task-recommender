@@ -13,6 +13,7 @@ from supabase_client import create_supabase_client
 AUTH_COOKIE_NAME = "task_recommender_refresh_token"
 AUTH_COOKIE_DAYS = 30
 COOKIE_CONTROLLER_KEY = "task_recommender_auth_cookies"
+AUTH_CLIENT_KEY = "_authenticated_supabase_client"
 
 AUTH_COOKIE_MAX_AGE = (
     AUTH_COOKIE_DAYS
@@ -64,37 +65,34 @@ def save_refresh_cookie(
     if not refresh_token:
         return
 
-    controller = (
-        get_cookie_controller()
-    )
+    controller = get_cookie_controller()
 
     controller.set(
         AUTH_COOKIE_NAME,
         refresh_token,
         path="/",
-        max_age=(
-            AUTH_COOKIE_MAX_AGE
+        expires=(
+            datetime.now()
+            + timedelta(days=AUTH_COOKIE_DAYS)
         ),
+        max_age=AUTH_COOKIE_MAX_AGE,
         secure=use_secure_cookie(),
         same_site="lax",
     )
+
     
 
 def read_refresh_cookie():
     """
-    ログイン維持用Cookieを取得する。
+    ブラウザに保存されたRefresh Tokenを取得する。
 
-    最初にStreamlit標準の
-    st.context.cookiesを使い、
-    取得できない場合だけ
-    CookieControllerを使用する。
+    CookieControllerは現在のブラウザ状態を確認できるため
+    先に使用し、取得できない場合に初回リクエストのCookieを確認する。
     """
 
-    # ページを開いた時点で送信されたCookieを
-    # Streamlit標準機能から取得する
     try:
         refresh_token = (
-            st.context.cookies.get(
+            get_cookie_controller().get(
                 AUTH_COOKIE_NAME
             )
         )
@@ -105,19 +103,46 @@ def read_refresh_cookie():
     except Exception:
         pass
 
-    # 古いStreamlitや通常のrerun用
     try:
-        controller = (
-            get_cookie_controller()
-        )
-
-        return controller.get(
+        return st.context.cookies.get(
             AUTH_COOKIE_NAME
         )
 
     except Exception:
         return None
+
     
+def ensure_refresh_cookie():
+    """
+    ログイン中のRefresh TokenがCookieに保存されているか確認し、
+    未保存または古い場合は書き直す。
+    """
+
+    refresh_token = st.session_state.get(
+        "supabase_refresh_token"
+    )
+
+    if not refresh_token:
+        return
+
+    try:
+        controller = get_cookie_controller()
+        saved_token = controller.get(
+            AUTH_COOKIE_NAME
+        )
+
+        if saved_token != refresh_token:
+            save_refresh_cookie(
+                refresh_token
+            )
+
+    except Exception as error:
+        # Cookie保存に失敗しても、現在のログイン状態は維持する。
+        print(
+            "[auth] Cookie再保存エラー:",
+            repr(error),
+        )
+
 def is_invalid_refresh_token_error(
     error,
 ):
@@ -167,8 +192,10 @@ def remove_refresh_cookie():
 def save_auth_session(
     auth_response,
     persist_cookie=True,
+    client=None,
 ):
     """Supabaseの認証情報をSession Stateへ保存する。"""
+
     session = getattr(
         auth_response,
         "session",
@@ -181,7 +208,6 @@ def save_auth_session(
         None,
     )
 
-    # refresh_session()などでは、userがsession側にある場合がある。
     if user is None and session is not None:
         user = getattr(
             session,
@@ -201,14 +227,15 @@ def save_auth_session(
     st.session_state["user_id"] = user.id
     st.session_state["user_email"] = user.email
 
+    if client is not None:
+        st.session_state[AUTH_CLIENT_KEY] = client
+
     if persist_cookie:
         try:
             save_refresh_cookie(
                 session.refresh_token,
             )
         except Exception as error:
-            # Cookie保存だけ失敗しても、
-            # アカウント作成やログイン自体は成功扱いにする。
             print(
                 "[auth] Cookie保存エラー:",
                 repr(error),
@@ -217,13 +244,16 @@ def save_auth_session(
     return True
 
 
+
 def clear_auth_session(remove_cookie=False):
     """Streamlit側の認証情報を削除する。"""
+
     auth_keys = [
         "supabase_access_token",
         "supabase_refresh_token",
         "user_id",
         "user_email",
+        AUTH_CLIENT_KEY,
     ]
 
     for key in auth_keys:
@@ -234,6 +264,7 @@ def clear_auth_session(remove_cookie=False):
 
     if remove_cookie:
         remove_refresh_cookie()
+
 
 
 def is_logged_in():
@@ -262,35 +293,29 @@ def is_logged_in():
 # =====================================
 def restore_auth_session():
     """
-    ページ再読み込み時に、
-    CookieのRefresh Tokenから
+    ページ再読み込み時に、CookieのRefresh Tokenから
     Supabaseセッションを復元する。
     """
 
     if is_logged_in():
+        ensure_refresh_cookie()
         return True
 
-    refresh_token = (
-        read_refresh_cookie()
-    )
+    refresh_token = read_refresh_cookie()
 
     if not refresh_token:
         return False
 
     try:
-        client = (
-            create_supabase_client()
-        )
-
-        response = (
-            client.auth.refresh_session(
-                refresh_token
-            )
+        client = create_supabase_client()
+        response = client.auth.refresh_session(
+            refresh_token
         )
 
         restored = save_auth_session(
             response,
             persist_cookie=True,
+            client=client,
         )
 
         if not restored:
@@ -299,11 +324,15 @@ def restore_auth_session():
             )
             return False
 
+        ensure_refresh_cookie()
         return True
 
     except Exception as error:
-        # 通信エラーなどではCookieを消さない。
-        # Tokenが本当に無効な場合だけ削除する。
+        print(
+            "[auth] セッション復元エラー:",
+            repr(error),
+        )
+
         should_remove_cookie = (
             is_invalid_refresh_token_error(
                 error
@@ -311,12 +340,10 @@ def restore_auth_session():
         )
 
         clear_auth_session(
-            remove_cookie=(
-                should_remove_cookie
-            )
+            remove_cookie=should_remove_cookie
         )
-
         return False
+
 
 
 # =====================================
@@ -324,38 +351,33 @@ def restore_auth_session():
 # =====================================
 def get_authenticated_client():
     """
-    現在ログインしているユーザーの
-    JWTを設定したSupabaseクライアントを返す。
+    認証済みSupabaseクライアントを返す。
+
+    同じStreamlitセッション内ではクライアントを使い回し、
+    データ取得のたびにRefresh Tokenを更新しないようにする。
     """
 
     if not is_logged_in():
-        restored = (
-            restore_auth_session()
-        )
-
-        if not restored:
+        if not restore_auth_session():
             return None
 
-    client = (
-        create_supabase_client()
+    existing_client = st.session_state.get(
+        AUTH_CLIENT_KEY
     )
 
-    previous_refresh_token = (
-        st.session_state.get(
-            "supabase_refresh_token"
-        )
-    )
+    if existing_client is not None:
+        ensure_refresh_cookie()
+        return existing_client
 
     try:
-        response = (
-            client.auth.set_session(
-                st.session_state[
-                    "supabase_access_token"
-                ],
-                st.session_state[
-                    "supabase_refresh_token"
-                ],
-            )
+        client = create_supabase_client()
+        response = client.auth.set_session(
+            st.session_state[
+                "supabase_access_token"
+            ],
+            st.session_state[
+                "supabase_refresh_token"
+            ],
         )
 
         if response.session is None:
@@ -364,21 +386,10 @@ def get_authenticated_client():
             )
             return None
 
-        new_refresh_token = (
-            response.session
-            .refresh_token
-        )
-
-        token_changed = (
-            new_refresh_token
-            != previous_refresh_token
-        )
-
         saved = save_auth_session(
             response,
-            persist_cookie=(
-                token_changed
-            ),
+            persist_cookie=True,
+            client=client,
         )
 
         if not saved:
@@ -387,11 +398,15 @@ def get_authenticated_client():
             )
             return None
 
+        ensure_refresh_cookie()
         return client
 
     except Exception as error:
-        # Tokenが本当に無効な場合だけ
-        # Cookieも削除する
+        print(
+            "[auth] 認証クライアント作成エラー:",
+            repr(error),
+        )
+
         should_remove_cookie = (
             is_invalid_refresh_token_error(
                 error
@@ -399,12 +414,10 @@ def get_authenticated_client():
         )
 
         clear_auth_session(
-            remove_cookie=(
-                should_remove_cookie
-            )
+            remove_cookie=should_remove_cookie
         )
-
         return None
+
 
 
 # =====================================
@@ -517,7 +530,9 @@ def render_login_form():
         if save_auth_session(
             response,
             persist_cookie=True,
+            client=client,
         ):
+            ensure_refresh_cookie()
             st.rerun()
 
         st.error(
@@ -657,6 +672,7 @@ def render_signup_form():
     if not save_auth_session(
         response,
         persist_cookie=True,
+        client=client,
     ):
         st.success(
             "アカウントは作成されました。"
@@ -667,6 +683,8 @@ def render_signup_form():
             "入力してください。"
         )
         return
+
+    ensure_refresh_cookie()
 
     st.session_state["message"] = (
         "アカウントを作成しました ☕"
