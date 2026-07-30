@@ -628,6 +628,53 @@ with st.container(
 
     line-height: 1.8;
 }
+/* =====================================
+   スマホ表示
+===================================== */
+
+@media (max-width: 700px) {
+
+    /* ページ全体の余白を小さくする */
+    .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        padding-top: 1.5rem !important;
+    }
+
+    /* タイトルを少し小さく */
+    h1 {
+        font-size: 1.8rem !important;
+    }
+
+    h2 {
+        font-size: 1.5rem !important;
+    }
+
+    h3 {
+        font-size: 1.2rem !important;
+    }
+
+    /* TODAY'S PICK */
+    .today-pick-title {
+        font-size: 1.35rem !important;
+        line-height: 1.5 !important;
+    }
+
+    /* カード内の文字 */
+    .task-info-value {
+        font-size: 1rem !important;
+    }
+
+    /* 集中モード */
+    .focus-countdown {
+        font-size: 3.2rem !important;
+    }
+
+    /* 理由欄 */
+    .reason-box {
+        padding: 0.9rem !important;
+    }
+}
 
     </style>
     """,
@@ -772,44 +819,32 @@ else:
     # =====================================
 
     page = st.segmented_control(
-        "ページ",
-        options=[
-            "☕ 今日",
-            "📅 見通し",
-            "📚 課題一覧",
-            "＋ 課題を追加",
-        ],
-        default="☕ 今日",
-        selection_mode="single",
-        label_visibility="collapsed",
-    )
-
-
+    "ページ",
+    options=[
+        "☕ 今日",
+        "📅 見通し",
+        "📚 課題",
+        "＋ 追加",
+    ],
+    default="☕ 今日",
+    selection_mode="single",
+    label_visibility="collapsed",
+)
     if page == "☕ 今日":
-
         render_today(
-            tasks,
-            weekly_available_minutes,
-            date_overrides,
-        )
-
-
+        tasks,
+        weekly_available_minutes,
+        date_overrides,
+    )
     elif page == "📅 見通し":
-
         render_outlook(
-            tasks,
-            weekly_available_minutes,
-            date_overrides,
-        )
-
-
-    elif page == "📚 課題一覧":
-
+        tasks,
+        weekly_available_minutes,
+        date_overrides,
+    )
+    elif page == "📚 課題":
         render_tasks(
-            tasks
-        )
-
-
-    elif page == "＋ 課題を追加":
-
+        tasks
+    )
+    elif page == "＋ 追加":
         render_add_task()
