@@ -703,9 +703,15 @@ def render_add_task():
                 "まとめて追加しました ☕"
             )
 
+        # 1件追加・複数件追加のどちらでも実行する
         st.session_state[
             "message"
         ] = message
+
+        # 課題一覧へ移動する
+        st.session_state[
+            "redirect_to_task_list"
+        ] = True
 
         # 古い入力欄の管理情報を削除
         st.session_state.pop(
@@ -718,7 +724,7 @@ def render_add_task():
             None,
         )
 
-        # 新しいキーに切り替えて入力内容を初期化
+        # 入力欄を初期化する
         st.session_state[
             "add_task_form_version"
         ] = (

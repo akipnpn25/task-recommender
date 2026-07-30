@@ -726,6 +726,8 @@ restore_auth_session()
 if not is_logged_in():
     render_auth_page()
     st.stop()
+
+
 # =====================================
 # 初期化
 # =====================================
@@ -830,12 +832,7 @@ if (
     is_focus_mode
     or is_focus_result_mode
 ):
-    
-    if (
-    is_focus_mode
-    or is_focus_result_mode
-):
-        st.markdown(
+    st.markdown(
         """
         <style>
         [data-testid="stSidebar"] {
@@ -856,40 +853,64 @@ if (
         date_overrides,
     )
 
-
 else:
-
     # =====================================
     # 通常ナビゲーション
     # =====================================
 
-    page = st.segmented_control(
-    "ページ",
-    options=[
+    navigation_options = [
         "☕ 今日",
         "📅 見通し",
         "📚 課題",
         "＋ 追加",
-    ],
-    default="☕ 今日",
-    selection_mode="single",
-    label_visibility="collapsed",
-)
+    ]
+
+    navigation_key = (
+        "main_navigation"
+    )
+
+    # 最初に開くページ
+    if navigation_key not in st.session_state:
+        st.session_state[
+            navigation_key
+        ] = "☕ 今日"
+
+    # 課題追加後は、ウィジェットを表示する前に
+    # 課題一覧へ移動させる
+    if st.session_state.pop(
+        "redirect_to_task_list",
+        False,
+    ):
+        st.session_state[
+            navigation_key
+        ] = "📚 課題"
+
+    page = st.segmented_control(
+        "ページ",
+        options=navigation_options,
+        selection_mode="single",
+        key=navigation_key,
+        label_visibility="collapsed",
+    )
+
     if page == "☕ 今日":
         render_today(
-        tasks,
-        weekly_available_minutes,
-        date_overrides,
-    )
+            tasks,
+            weekly_available_minutes,
+            date_overrides,
+        )
+
     elif page == "📅 見通し":
         render_outlook(
-        tasks,
-        weekly_available_minutes,
-        date_overrides,
-    )
+            tasks,
+            weekly_available_minutes,
+            date_overrides,
+        )
+
     elif page == "📚 課題":
         render_tasks(
-        tasks
-    )
+            tasks
+        )
+
     elif page == "＋ 追加":
         render_add_task()
