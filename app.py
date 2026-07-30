@@ -8,6 +8,7 @@ from db import (
 )
 from auth import (
     is_logged_in,
+    restore_auth_session,
     render_auth_page,
     logout,
 )
@@ -685,14 +686,21 @@ with st.container(
     """,
     unsafe_allow_html=True,
 )
+
 # =====================================
-# ログイン確認
+# ログイン状態を復元
+# =====================================
+
+restore_auth_session()
+
+
+# =====================================
+# 未ログインならログイン画面
 # =====================================
 
 if not is_logged_in():
     render_auth_page()
     st.stop()
-
 # =====================================
 # 初期化
 # =====================================
