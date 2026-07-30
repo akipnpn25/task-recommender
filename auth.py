@@ -590,11 +590,25 @@ def render_auth_page():
                             )
 
                     except Exception as error:
-                        st.error(
-                            "アカウントを"
-                            "作成できませんでした。"
-                        )
+                        error_text = str(error).lower()
 
-                        st.caption(
-                            str(error)
-                        )
+    if (
+        "already registered" in error_text
+        or "database error saving new user" in error_text
+    ):
+        st.warning(
+            "このメールアドレスは、"
+            "すでに登録されている可能性があります。"
+        )
+
+        st.info(
+            "「ログイン」に切り替えてお試しください。"
+            "確認メールが届いている場合は、"
+            "メール内のリンクも開いてください。"
+        )
+
+    else:
+        st.error(
+            "アカウントを作成できませんでした。"
+            "時間をおいてもう一度お試しください。"
+        )
