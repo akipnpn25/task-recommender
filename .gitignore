@@ -176,3 +176,4 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 db_sqlite_backup.py
+data/*.db
