@@ -12,29 +12,56 @@ from supabase_client import create_supabase_client
 
 AUTH_COOKIE_NAME = "task_recommender_refresh_token"
 AUTH_COOKIE_DAYS = 30
-COOKIE_CONTROLLER_KEY = "task_recommender_auth_cookies"
+AUTH_COOKIE_MAX_AGE = AUTH_COOKIE_DAYS * 24 * 60 * 60
+
+COOKIE_READER_KEY = "task_recommender_cookie_reader"
+COOKIE_WRITER_KEY = "task_recommender_cookie_writer"
+COOKIE_REMOVER_KEY = "task_recommender_cookie_remover"
+
 AUTH_CLIENT_KEY = "_authenticated_supabase_client"
-
-AUTH_COOKIE_MAX_AGE = (
-    AUTH_COOKIE_DAYS
-    * 24
-    * 60
-    * 60
-)
+AUTH_COOKIE_PENDING_KEY = "_auth_cookie_pending"
+AUTH_IGNORE_CONTEXT_COOKIE_KEY = "_auth_ignore_context_cookie"
 
 
-def get_cookie_controller():
-    """ブラウザCookieを操作するコントローラーを返す。"""
-    return CookieController(
-        key=COOKIE_CONTROLLER_KEY,
-    )
+# =====================================
+# Cookie操作
+# =====================================
+
+
+def get_cookie_controller(key):
+    """指定した用途のCookieControllerを返す。"""
+    return CookieController(key=key)
+
+
+def initialize_cookie_controllers():
+    """
+    読込・書込・削除で別々のコンポーネントキーを使う。
+
+    同じ実行内で同じキーのCookieコンポーネントを
+    複数回呼ぶと競合しやすいため、用途ごとに分離する。
+    """
+
+    reader_ready = COOKIE_READER_KEY in st.session_state
+    writer_ready = COOKIE_WRITER_KEY in st.session_state
+    remover_ready = COOKIE_REMOVER_KEY in st.session_state
+
+    reader = get_cookie_controller(COOKIE_READER_KEY)
+    writer = get_cookie_controller(COOKIE_WRITER_KEY)
+    remover = get_cookie_controller(COOKIE_REMOVER_KEY)
+
+    return {
+        "reader": reader,
+        "writer": writer,
+        "remover": remover,
+        "reader_ready": reader_ready,
+        "writer_ready": writer_ready,
+        "remover_ready": remover_ready,
+    }
 
 
 def use_secure_cookie():
-    """
-    localhostではHTTPのためSecure=False、
-    公開環境ではSecure=Trueにする。
-    """
+    """公開環境ではSecure属性を有効にする。"""
+
     try:
         host = (
             st.context.headers
@@ -54,67 +81,41 @@ def use_secure_cookie():
     return host not in local_hosts
 
 
-def save_refresh_cookie(
-    refresh_token,
+def read_refresh_cookie(
+    reader,
+    reader_ready,
 ):
-    """
-    ログイン維持用のRefresh Tokenを
-    30日間Cookieへ保存する。
-    """
+    """ブラウザからRefresh Tokenを取得する。"""
 
-    if not refresh_token:
-        return
+    # st.context.cookiesは接続開始時点のCookieなので、
+    # 通常の再訪問では最も早く、安定して取得できる。
+    if not st.session_state.get(
+        AUTH_IGNORE_CONTEXT_COOKIE_KEY,
+        False,
+    ):
+        try:
+            refresh_token = st.context.cookies.get(
+                AUTH_COOKIE_NAME
+            )
 
-    controller = get_cookie_controller()
+            if refresh_token:
+                return refresh_token
 
-    controller.set(
-        AUTH_COOKIE_NAME,
-        refresh_token,
-        path="/",
-        expires=(
-            datetime.now()
-            + timedelta(days=AUTH_COOKIE_DAYS)
-        ),
-        max_age=AUTH_COOKIE_MAX_AGE,
-        secure=use_secure_cookie(),
-        same_site="lax",
-    )
+        except Exception:
+            pass
 
-    
-
-def read_refresh_cookie():
-    """
-    ブラウザに保存されたRefresh Tokenを取得する。
-
-    最初のHTTPリクエストに含まれるCookieを先に確認し、
-    見つからない場合はCookieControllerのキャッシュを
-    ブラウザの実データで更新してから取得する。
-    """
-
-    # 新しくページを開いた場合は、
-    # st.context.cookiesが最も早く確認できる。
+    # 初回はCookieControllerのコンストラクタが
+    # getAllコンポーネントを1回描画している。
+    # 同じ実行でrefresh()まで呼ぶと同一キーが競合するため、
+    # 2回目以降だけrefresh()する。
     try:
-        refresh_token = st.context.cookies.get(
-            AUTH_COOKIE_NAME
-        )
+        if reader_ready:
+            reader.refresh()
 
-        if refresh_token:
-            return refresh_token
+        cookies = reader.getAll() or {}
 
-    except Exception:
-        pass
-
-    # CookieControllerはSession State内のキャッシュを
-    # 使用するため、get()の前にrefresh()が必要。
-    try:
-        controller = get_cookie_controller()
-        controller.refresh()
-
-        cookies = controller.getAll() or {}
-
-        # 次のrerunでも最新値を使えるようにする。
         st.session_state[
-            COOKIE_CONTROLLER_KEY
+            COOKIE_READER_KEY
         ] = cookies
 
         return cookies.get(
@@ -129,94 +130,125 @@ def read_refresh_cookie():
         return None
 
 
-def ensure_refresh_cookie():
-    """
-    ログイン中のRefresh TokenがCookieに保存されているか確認し、
-    未保存または古い場合は書き直す。
-    """
+def write_refresh_cookie(
+    writer,
+    writer_ready,
+    refresh_token,
+):
+    """Refresh Tokenを30日間Cookieへ保存する。"""
+
+    if not refresh_token:
+        return False
+
+    # CookieControllerは初回生成時にgetAllを描画する。
+    # 同じ実行でsetも呼ぶとキーが競合するため、
+    # 初回だけ次のrerunへ持ち越す。
+    if not writer_ready:
+        st.session_state[
+            AUTH_COOKIE_PENDING_KEY
+        ] = refresh_token
+        return False
+
+    try:
+        writer.set(
+            AUTH_COOKIE_NAME,
+            refresh_token,
+            path="/",
+            expires=(
+                datetime.now()
+                + timedelta(days=AUTH_COOKIE_DAYS)
+            ),
+            max_age=AUTH_COOKIE_MAX_AGE,
+            secure=use_secure_cookie(),
+            same_site="lax",
+        )
+
+        st.session_state.pop(
+            AUTH_COOKIE_PENDING_KEY,
+            None,
+        )
+
+        return True
+
+    except Exception as error:
+        st.session_state[
+            AUTH_COOKIE_PENDING_KEY
+        ] = refresh_token
+
+        print(
+            "[auth] Cookie保存エラー:",
+            repr(error),
+        )
+
+        return False
+
+
+def sync_refresh_cookie(
+    writer,
+    writer_ready,
+):
+    """ログイン中の最新Refresh TokenをCookieへ同期する。"""
 
     refresh_token = st.session_state.get(
         "supabase_refresh_token"
     )
 
     if not refresh_token:
-        return
+        return False
+
+    return write_refresh_cookie(
+        writer,
+        writer_ready,
+        refresh_token,
+    )
+
+
+def remove_refresh_cookie(
+    remover,
+    remover_ready,
+):
+    """ログイン維持用Cookieを削除する。"""
+
+    if not remover_ready:
+        return False
 
     try:
-        controller = get_cookie_controller()
-
-        # Session State内の古いキャッシュではなく、
-        # ブラウザの現在のCookieを確認する。
-        controller.refresh()
-        cookies = controller.getAll() or {}
-
-        st.session_state[
-            COOKIE_CONTROLLER_KEY
-        ] = cookies
-
-        saved_token = cookies.get(
-            AUTH_COOKIE_NAME
+        remover.remove(
+            AUTH_COOKIE_NAME,
+            path="/",
+            secure=use_secure_cookie(),
+            same_site="lax",
         )
-
-        if saved_token != refresh_token:
-            save_refresh_cookie(
-                refresh_token
-            )
+        return True
 
     except Exception as error:
-        # Cookie保存に失敗しても、
-        # 現在のログイン状態は維持する。
+        # Cookieが存在しない場合のKeyErrorも含め、
+        # ログアウト処理自体は続ける。
         print(
-            "[auth] Cookie再保存エラー:",
+            "[auth] Cookie削除エラー:",
             repr(error),
+        )
+        return False
+
+
+def clear_cookie_caches():
+    """CookieControllerのSession Stateキャッシュを消す。"""
+
+    for key in (
+        COOKIE_READER_KEY,
+        COOKIE_WRITER_KEY,
+        COOKIE_REMOVER_KEY,
+    ):
+        st.session_state.pop(
+            key,
+            None,
         )
 
 
-def is_invalid_refresh_token_error(
-    error,
-):
-    """
-    本当にRefresh Tokenが無効な場合だけ
-    Cookieを削除するための判定。
-    """
-
-    error_text = str(
-        error
-    ).lower()
-
-    invalid_markers = (
-        "invalid refresh token",
-        "refresh token not found",
-        "refresh token has been revoked",
-        "refresh token already used",
-        "invalid_grant",
-    )
-
-    return any(
-        marker in error_text
-        for marker in invalid_markers
-    )
-
-def remove_refresh_cookie():
-    """認証用Cookieを削除する。"""
-    controller = get_cookie_controller()
-
-    try:
-        if controller.get(AUTH_COOKIE_NAME) is not None:
-            controller.remove(
-                AUTH_COOKIE_NAME,
-                path="/",
-                secure=use_secure_cookie(),
-                same_site="lax",
-            )
-    except Exception:
-        # Cookieが存在しない場合もログアウト処理は続ける。
-        pass
-
-
 # =====================================
-# Streamlit側の認証セッション
+# 認証セッション
 # =====================================
+
 
 def save_auth_session(
     auth_response,
@@ -247,57 +279,45 @@ def save_auth_session(
     if session is None or user is None:
         return False
 
-    st.session_state["supabase_access_token"] = (
-        session.access_token
-    )
-    st.session_state["supabase_refresh_token"] = (
-        session.refresh_token
-    )
-    st.session_state["user_id"] = user.id
-    st.session_state["user_email"] = user.email
+    st.session_state[
+        "supabase_access_token"
+    ] = session.access_token
+
+    st.session_state[
+        "supabase_refresh_token"
+    ] = session.refresh_token
+
+    st.session_state[
+        "user_id"
+    ] = user.id
+
+    st.session_state[
+        "user_email"
+    ] = user.email
 
     if client is not None:
-        st.session_state[AUTH_CLIENT_KEY] = client
+        st.session_state[
+            AUTH_CLIENT_KEY
+        ] = client
 
     if persist_cookie:
-        try:
-            save_refresh_cookie(
-                session.refresh_token,
-            )
-        except Exception as error:
-            print(
-                "[auth] Cookie保存エラー:",
-                repr(error),
-            )
+        st.session_state[
+            AUTH_COOKIE_PENDING_KEY
+        ] = session.refresh_token
+
+    # ログアウト後に再ログインした場合は、
+    # 接続開始時の古いCookieを無視するフラグを解除する。
+    st.session_state.pop(
+        AUTH_IGNORE_CONTEXT_COOKIE_KEY,
+        None,
+    )
 
     return True
 
 
-
-def clear_auth_session(remove_cookie=False):
-    """Streamlit側の認証情報を削除する。"""
-
-    auth_keys = [
-        "supabase_access_token",
-        "supabase_refresh_token",
-        "user_id",
-        "user_email",
-        AUTH_CLIENT_KEY,
-    ]
-
-    for key in auth_keys:
-        st.session_state.pop(
-            key,
-            None,
-        )
-
-    if remove_cookie:
-        remove_refresh_cookie()
-
-
-
 def is_logged_in():
     """必要な認証情報がSession Stateにあるか確認する。"""
+
     return (
         bool(
             st.session_state.get(
@@ -317,26 +337,72 @@ def is_logged_in():
     )
 
 
+def clear_auth_session():
+    """Streamlit側の認証情報を削除する。"""
+
+    for key in (
+        "supabase_access_token",
+        "supabase_refresh_token",
+        "user_id",
+        "user_email",
+        AUTH_CLIENT_KEY,
+        AUTH_COOKIE_PENDING_KEY,
+    ):
+        st.session_state.pop(
+            key,
+            None,
+        )
+
+
+def is_invalid_refresh_token_error(error):
+    """Refresh Tokenが本当に無効なエラーか判定する。"""
+
+    error_text = str(error).lower()
+
+    invalid_markers = (
+        "invalid refresh token",
+        "refresh token not found",
+        "refresh token has been revoked",
+        "refresh token already used",
+        "invalid_grant",
+    )
+
+    return any(
+        marker in error_text
+        for marker in invalid_markers
+    )
+
+
 # =====================================
 # Cookieからログイン状態を復元
 # =====================================
+
+
 def restore_auth_session():
-    """
-    ページ再読み込み時に、CookieのRefresh Tokenから
-    Supabaseセッションを復元する。
-    """
+    """CookieからSupabaseのログイン状態を復元する。"""
+
+    controllers = initialize_cookie_controllers()
 
     if is_logged_in():
-        ensure_refresh_cookie()
+        # 毎回同じ場所からCookieを同期することで、
+        # 遅い端末でも保存処理が実行されやすくなる。
+        sync_refresh_cookie(
+            controllers["writer"],
+            controllers["writer_ready"],
+        )
         return True
 
-    refresh_token = read_refresh_cookie()
+    refresh_token = read_refresh_cookie(
+        controllers["reader"],
+        controllers["reader_ready"],
+    )
 
     if not refresh_token:
         return False
 
     try:
         client = create_supabase_client()
+
         response = client.auth.refresh_session(
             refresh_token
         )
@@ -348,12 +414,15 @@ def restore_auth_session():
         )
 
         if not restored:
-            clear_auth_session(
-                remove_cookie=True
-            )
+            clear_auth_session()
             return False
 
-        ensure_refresh_cookie()
+        # refresh_session()で更新されたTokenを保存する。
+        sync_refresh_cookie(
+            controllers["writer"],
+            controllers["writer_ready"],
+        )
+
         return True
 
     except Exception as error:
@@ -362,29 +431,31 @@ def restore_auth_session():
             repr(error),
         )
 
-        should_remove_cookie = (
+        invalid_token = (
             is_invalid_refresh_token_error(
                 error
             )
         )
 
-        clear_auth_session(
-            remove_cookie=should_remove_cookie
-        )
-        return False
+        clear_auth_session()
 
+        if invalid_token:
+            remove_refresh_cookie(
+                controllers["remover"],
+                controllers["remover_ready"],
+            )
+            clear_cookie_caches()
+
+        return False
 
 
 # =====================================
 # 認証済みSupabaseクライアント
 # =====================================
-def get_authenticated_client():
-    """
-    認証済みSupabaseクライアントを返す。
 
-    同じStreamlitセッション内ではクライアントを使い回し、
-    データ取得のたびにRefresh Tokenを更新しないようにする。
-    """
+
+def get_authenticated_client():
+    """認証済みSupabaseクライアントを返す。"""
 
     if not is_logged_in():
         if not restore_auth_session():
@@ -395,11 +466,11 @@ def get_authenticated_client():
     )
 
     if existing_client is not None:
-        ensure_refresh_cookie()
         return existing_client
 
     try:
         client = create_supabase_client()
+
         response = client.auth.set_session(
             st.session_state[
                 "supabase_access_token"
@@ -410,9 +481,7 @@ def get_authenticated_client():
         )
 
         if response.session is None:
-            clear_auth_session(
-                remove_cookie=True
-            )
+            clear_auth_session()
             return None
 
         saved = save_auth_session(
@@ -422,12 +491,9 @@ def get_authenticated_client():
         )
 
         if not saved:
-            clear_auth_session(
-                remove_cookie=False
-            )
+            clear_auth_session()
             return None
 
-        ensure_refresh_cookie()
         return client
 
     except Exception as error:
@@ -436,47 +502,56 @@ def get_authenticated_client():
             repr(error),
         )
 
-        should_remove_cookie = (
-            is_invalid_refresh_token_error(
-                error
-            )
-        )
-
-        clear_auth_session(
-            remove_cookie=should_remove_cookie
-        )
+        clear_auth_session()
         return None
-
 
 
 # =====================================
 # ログアウト
 # =====================================
 
+
 def logout():
-    """Supabaseからログアウトし、CookieとSession Stateを削除する。"""
-    try:
-        client = get_authenticated_client()
-    except Exception:
-        client = None
+    """Supabaseとブラウザの両方からログアウトする。"""
+
+    controllers = initialize_cookie_controllers()
+
+    client = st.session_state.get(
+        AUTH_CLIENT_KEY
+    )
 
     if client is not None:
         try:
             client.auth.sign_out()
-        except Exception:
-            pass
+        except Exception as error:
+            print(
+                "[auth] Supabaseログアウトエラー:",
+                repr(error),
+            )
 
-    clear_auth_session(
-        remove_cookie=True,
+    # st.context.cookiesは接続開始時点の値のため、
+    # 同じ接続中は削除前のCookieを返す可能性がある。
+    st.session_state[
+        AUTH_IGNORE_CONTEXT_COOKIE_KEY
+    ] = True
+
+    remove_refresh_cookie(
+        controllers["remover"],
+        controllers["remover_ready"],
     )
 
+    clear_auth_session()
+    clear_cookie_caches()
+
 
 # =====================================
-# 認証エラーの判定
+# 認証エラー判定
 # =====================================
+
 
 def is_duplicate_signup_error(error):
     """登録済みメールの可能性が高いエラーか判定する。"""
+
     error_text = str(error).lower()
 
     duplicate_markers = (
@@ -494,6 +569,7 @@ def is_duplicate_signup_error(error):
 
 def is_signup_rate_limit_error(error):
     """新規登録の回数制限エラーか判定する。"""
+
     error_text = str(error).lower()
 
     rate_limit_markers = (
@@ -514,6 +590,7 @@ def is_signup_rate_limit_error(error):
 # =====================================
 # ログインフォーム
 # =====================================
+
 
 def render_login_form():
     with st.form("login_form"):
@@ -547,6 +624,7 @@ def render_login_form():
 
     try:
         client = create_supabase_client()
+
         response = (
             client.auth.sign_in_with_password(
                 {
@@ -561,23 +639,13 @@ def render_login_form():
             persist_cookie=True,
             client=client,
         ):
-            # CookieControllerがブラウザへCookieを書き込む前に
-            # 即時rerunすると、書き込みが中断される場合がある。
-            # この実行を最後まで完了させ、次のrerunでアプリへ進む。
-            st.success(
+            st.session_state["message"] = (
                 "ログインしました ☕"
             )
-            st.caption(
-                "自動で切り替わらない場合は、"
-                "下のボタンを押してください。"
-            )
-            st.button(
-                "アプリを開く",
-                key="continue_after_login",
-                type="primary",
-                use_container_width=True,
-            )
-            return
+
+            # 次の実行の冒頭で、安定した位置から
+            # Cookieを保存する。
+            st.rerun()
 
         st.error(
             "ログインできませんでした。"
@@ -588,6 +656,7 @@ def render_login_form():
             "[auth] ログインエラー:",
             repr(error),
         )
+
         st.error(
             "メールアドレスまたは"
             "パスワードを確認してください。"
@@ -597,6 +666,7 @@ def render_login_form():
 # =====================================
 # 新規登録フォーム
 # =====================================
+
 
 def render_signup_form():
     with st.form("signup_form"):
@@ -648,6 +718,7 @@ def render_signup_form():
 
     try:
         client = create_supabase_client()
+
         response = client.auth.sign_up(
             {
                 "email": email,
@@ -691,7 +762,6 @@ def render_signup_form():
         )
         return
 
-    # Confirm emailがOFFなら、登録成功時にsessionも返る。
     if response.user is None:
         st.error(
             "登録結果を確認できませんでした。"
@@ -705,10 +775,10 @@ def render_signup_form():
         )
         st.warning(
             "SupabaseのConfirm emailが"
-            "まだONになっている可能性があります。"
+            "ONになっている可能性があります。"
         )
         st.info(
-            "管理画面でConfirm emailをOFFにしたあと、"
+            "確認メールを開いたあと、"
             "「ログイン」からお試しください。"
         )
         return
@@ -728,30 +798,49 @@ def render_signup_form():
         )
         return
 
-    # Cookieの書き込みを完了させるため、
-    # ここでは即時rerunしない。
     st.session_state["message"] = (
         "アカウントを作成しました ☕"
     )
 
-    st.success(
-        "アカウントを作成しました ☕"
+    st.rerun()
+
+
+# =====================================
+# アプリ内ブラウザ判定
+# =====================================
+
+
+def is_in_app_browser():
+    """LINE・Instagramなどのアプリ内ブラウザか簡易判定する。"""
+
+    try:
+        user_agent = (
+            st.context.headers
+            .get("user-agent", "")
+            .lower()
+        )
+    except Exception:
+        return False
+
+    markers = (
+        "line/",
+        "instagram",
+        "fban",
+        "fbav",
+        "twitter",
+        "micromessenger",
     )
-    st.caption(
-        "自動で切り替わらない場合は、"
-        "下のボタンを押してください。"
-    )
-    st.button(
-        "アプリを開く",
-        key="continue_after_signup",
-        type="primary",
-        use_container_width=True,
+
+    return any(
+        marker in user_agent
+        for marker in markers
     )
 
 
 # =====================================
 # ログイン / 新規登録画面
 # =====================================
+
 
 def render_auth_page():
     st.markdown(
@@ -764,6 +853,13 @@ def render_auth_page():
     )
 
     st.write("")
+
+    if is_in_app_browser():
+        st.warning(
+            "LINEやInstagramなどのアプリ内ブラウザでは、"
+            "ログイン情報が保存されないことがあります。"
+            "右上のメニューからSafariまたはChromeで開いてください。"
+        )
 
     auth_mode = st.segmented_control(
         "認証",
