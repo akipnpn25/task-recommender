@@ -86,15 +86,16 @@ def read_refresh_cookie():
     """
     ブラウザに保存されたRefresh Tokenを取得する。
 
-    CookieControllerは現在のブラウザ状態を確認できるため
-    先に使用し、取得できない場合に初回リクエストのCookieを確認する。
+    最初のHTTPリクエストに含まれるCookieを先に確認し、
+    見つからない場合はCookieControllerのキャッシュを
+    ブラウザの実データで更新してから取得する。
     """
 
+    # 新しくページを開いた場合は、
+    # st.context.cookiesが最も早く確認できる。
     try:
-        refresh_token = (
-            get_cookie_controller().get(
-                AUTH_COOKIE_NAME
-            )
+        refresh_token = st.context.cookies.get(
+            AUTH_COOKIE_NAME
         )
 
         if refresh_token:
@@ -103,15 +104,31 @@ def read_refresh_cookie():
     except Exception:
         pass
 
+    # CookieControllerはSession State内のキャッシュを
+    # 使用するため、get()の前にrefresh()が必要。
     try:
-        return st.context.cookies.get(
+        controller = get_cookie_controller()
+        controller.refresh()
+
+        cookies = controller.getAll() or {}
+
+        # 次のrerunでも最新値を使えるようにする。
+        st.session_state[
+            COOKIE_CONTROLLER_KEY
+        ] = cookies
+
+        return cookies.get(
             AUTH_COOKIE_NAME
         )
 
-    except Exception:
+    except Exception as error:
+        print(
+            "[auth] Cookie読込エラー:",
+            repr(error),
+        )
         return None
 
-    
+
 def ensure_refresh_cookie():
     """
     ログイン中のRefresh TokenがCookieに保存されているか確認し、
@@ -127,7 +144,17 @@ def ensure_refresh_cookie():
 
     try:
         controller = get_cookie_controller()
-        saved_token = controller.get(
+
+        # Session State内の古いキャッシュではなく、
+        # ブラウザの現在のCookieを確認する。
+        controller.refresh()
+        cookies = controller.getAll() or {}
+
+        st.session_state[
+            COOKIE_CONTROLLER_KEY
+        ] = cookies
+
+        saved_token = cookies.get(
             AUTH_COOKIE_NAME
         )
 
@@ -137,11 +164,13 @@ def ensure_refresh_cookie():
             )
 
     except Exception as error:
-        # Cookie保存に失敗しても、現在のログイン状態は維持する。
+        # Cookie保存に失敗しても、
+        # 現在のログイン状態は維持する。
         print(
             "[auth] Cookie再保存エラー:",
             repr(error),
         )
+
 
 def is_invalid_refresh_token_error(
     error,
@@ -532,8 +561,23 @@ def render_login_form():
             persist_cookie=True,
             client=client,
         ):
-            ensure_refresh_cookie()
-            st.rerun()
+            # CookieControllerがブラウザへCookieを書き込む前に
+            # 即時rerunすると、書き込みが中断される場合がある。
+            # この実行を最後まで完了させ、次のrerunでアプリへ進む。
+            st.success(
+                "ログインしました ☕"
+            )
+            st.caption(
+                "自動で切り替わらない場合は、"
+                "下のボタンを押してください。"
+            )
+            st.button(
+                "アプリを開く",
+                key="continue_after_login",
+                type="primary",
+                use_container_width=True,
+            )
+            return
 
         st.error(
             "ログインできませんでした。"
@@ -684,12 +728,25 @@ def render_signup_form():
         )
         return
 
-    ensure_refresh_cookie()
-
+    # Cookieの書き込みを完了させるため、
+    # ここでは即時rerunしない。
     st.session_state["message"] = (
         "アカウントを作成しました ☕"
     )
-    st.rerun()
+
+    st.success(
+        "アカウントを作成しました ☕"
+    )
+    st.caption(
+        "自動で切り替わらない場合は、"
+        "下のボタンを押してください。"
+    )
+    st.button(
+        "アプリを開く",
+        key="continue_after_signup",
+        type="primary",
+        use_container_width=True,
+    )
 
 
 # =====================================
