@@ -64,19 +64,62 @@ def add_task(
     client = get_db_client()
     user_id = get_current_user_id()
 
-    client.table(
-        "tasks"
-    ).insert(
-        {
-            "user_id": user_id,
-            "title": title,
-            "deadline": deadline,
-            "estimated_minutes": (
-                estimated_minutes
-            ),
-            "progress": 0,
-        }
-    ).execute()
+    (
+        client.table(
+            "tasks"
+        )
+        .insert(
+            {
+                "user_id": user_id,
+                "title": title,
+                "deadline": deadline,
+                "estimated_minutes": int(
+                    estimated_minutes
+                ),
+                "progress": 0,
+            }
+        )
+        .execute()
+    )
+
+
+def add_tasks_bulk(
+    tasks,
+):
+    """
+    複数の課題を一度に追加する。
+    """
+
+    if not tasks:
+        return
+
+    client = get_db_client()
+    user_id = get_current_user_id()
+
+    rows = []
+
+    for task in tasks:
+        rows.append(
+            {
+                "user_id": user_id,
+                "title": task["title"],
+                "deadline": task["deadline"],
+                "estimated_minutes": int(
+                    task["estimated_minutes"]
+                ),
+                "progress": 0,
+            }
+        )
+
+    (
+        client.table(
+            "tasks"
+        )
+        .insert(
+            rows
+        )
+        .execute()
+    )
 
 
 def get_tasks():
@@ -181,7 +224,7 @@ def update_task(
             {
                 "title": title,
                 "deadline": deadline,
-                "estimated_minutes": (
+                "estimated_minutes": int(
                     estimated_minutes
                 ),
             }
@@ -211,7 +254,9 @@ def update_progress(
         )
         .update(
             {
-                "progress": progress,
+                "progress": int(
+                    progress
+                ),
             }
         )
         .eq(
@@ -244,6 +289,7 @@ def restore_task(
     90%へ戻して、
     再び通常の課題として扱う。
     """
+
     update_progress(
         task_id,
         90,
@@ -341,9 +387,7 @@ def save_weekly_settings(
     for (
         weekday,
         minutes,
-    ) in (
-        weekly_available_minutes.items()
-    ):
+    ) in weekly_available_minutes.items():
         rows.append(
             {
                 "user_id": user_id,
@@ -472,8 +516,6 @@ def add_focus_session(
     client = get_db_client()
     user_id = get_current_user_id()
 
-    # datetimeが渡ってきても
-    # 文字列が渡ってきても対応する
     if isinstance(
         started_at,
         datetime,
@@ -498,12 +540,8 @@ def add_focus_session(
             {
                 "user_id": user_id,
                 "task_id": task_id,
-                "task_title": (
-                    task_title
-                ),
-                "started_at": (
-                    started_at
-                ),
+                "task_title": task_title,
+                "started_at": started_at,
                 "ended_at": ended_at,
                 "focused_minutes": int(
                     focused_minutes
@@ -566,10 +604,6 @@ def get_today_focus_summary():
     )
 
     return {
-        "total_minutes": (
-            total_minutes
-        ),
-        "session_count": (
-            session_count
-        ),
+        "total_minutes": total_minutes,
+        "session_count": session_count,
     }

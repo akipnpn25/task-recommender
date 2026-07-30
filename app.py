@@ -681,6 +681,31 @@ with st.container(
         padding: 0.9rem !important;
     }
 }
+/* =====================================
+   課題登録などのメインボタン
+===================================== */
+
+button[kind="primary"],
+[data-testid="stBaseButton-primary"] {
+    background-color: #7F8F7A !important;
+    color: #FFFFFF !important;
+    border: 1px solid #6D7D68 !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 10px rgba(80, 95, 76, 0.18) !important;
+}
+
+button[kind="primary"]:hover,
+[data-testid="stBaseButton-primary"]:hover {
+    background-color: #6F806A !important;
+    color: #FFFFFF !important;
+    border-color: #62725E !important;
+    transform: translateY(-1px);
+}
+
+button[kind="primary"]:active,
+[data-testid="stBaseButton-primary"]:active {
+    transform: translateY(0);
+}
 
     </style>
     """,
