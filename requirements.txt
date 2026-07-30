@@ -1,5 +1,5 @@
 streamlit
 pandas
-pytestsupabase==2.31.0
+pytest
 supabase==2.31.0
 streamlit-cookies-controller==0.0.4
