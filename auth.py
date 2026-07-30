@@ -18,6 +18,7 @@ AUTH_COOKIE_MAX_AGE = AUTH_COOKIE_DAYS * 24 * 60 * 60
 COOKIE_MANAGER_STATE_KEY = "_auth_cookie_manager"
 COOKIE_WRITE_VERSION_KEY = "_auth_cookie_write_version"
 AUTH_CLIENT_KEY = "_authenticated_supabase_client"
+COOKIE_MANAGER_READY_KEY = "_auth_cookie_manager_ready"
 
 
 # =====================================
@@ -26,8 +27,8 @@ AUTH_CLIENT_KEY = "_authenticated_supabase_client"
 
 def get_cookie_manager():
     """
-    CookieManagerをユーザーのStreamlitセッション内で
-    1回だけ初期化する。
+    CookieManagerをユーザーごとの
+    Streamlitセッション内で1回だけ初期化する。
     """
 
     manager = st.session_state.get(
@@ -42,6 +43,30 @@ def get_cookie_manager():
         st.session_state[
             COOKIE_MANAGER_STATE_KEY
         ] = manager
+
+    return manager
+
+
+def ensure_cookie_manager_ready():
+    """
+    CookieManagerがブラウザ側のCookieを
+    読み込むための初回rerunを1度だけ行う。
+    """
+
+    manager = get_cookie_manager()
+
+    if not st.session_state.get(
+        COOKIE_MANAGER_READY_KEY,
+        False,
+    ):
+        st.session_state[
+            COOKIE_MANAGER_READY_KEY
+        ] = True
+
+        # CookieManagerのフロント側が
+        # Cookie一覧を返す時間を確保する
+        time.sleep(0.6)
+        st.rerun()
 
     return manager
 
@@ -73,12 +98,30 @@ def next_cookie_component_key(
 
 def read_refresh_cookie():
     """
-    新しいブラウザ接続の最初のリクエストに
-    含まれているCookieを読み取る。
+    CookieManagerが保存したCookieを、
+    同じCookieManagerから読み取る。
     """
 
     try:
-        return st.context.cookies.get(
+        manager = (
+            ensure_cookie_manager_ready()
+        )
+
+        cookies = getattr(
+            manager,
+            "cookies",
+            {},
+        ) or {}
+
+        refresh_token = cookies.get(
+            AUTH_COOKIE_NAME
+        )
+
+        if refresh_token:
+            return refresh_token
+
+        # バージョン差に備えたフォールバック
+        return manager.get(
             AUTH_COOKIE_NAME
         )
 
@@ -104,7 +147,7 @@ def write_refresh_cookie(
         return False
 
     try:
-        manager = get_cookie_manager()
+        manager = ensure_cookie_manager_ready()
 
         manager.set(
             AUTH_COOKIE_NAME,
@@ -129,6 +172,13 @@ def write_refresh_cookie(
         # ブラウザ側コンポーネントがCookieを書き込む時間を確保
         time.sleep(0.8)
 
+        try:
+            manager.cookies[
+                AUTH_COOKIE_NAME
+            ] = refresh_token
+        except Exception:
+            pass
+
         print(
             "[auth] ログイン維持Cookieを書き込みました。"
         )
@@ -149,7 +199,7 @@ def remove_refresh_cookie():
     """
 
     try:
-        manager = get_cookie_manager()
+        manager = ensure_cookie_manager_ready()
 
         manager.delete(
             AUTH_COOKIE_NAME,
@@ -157,6 +207,14 @@ def remove_refresh_cookie():
                 "delete"
             ),
         )
+
+        try:
+            manager.cookies.pop(
+                AUTH_COOKIE_NAME,
+                None,
+            )
+        except Exception:
+            pass
 
         time.sleep(0.5)
 
