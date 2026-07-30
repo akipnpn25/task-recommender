@@ -1,147 +1,59 @@
-import sqlite3
-from pathlib import Path
-from datetime import datetime
+from datetime import (
+    datetime,
+    timedelta,
+)
 
+import streamlit as st
 
-DB_PATH = Path("data/tasks.db")
-
-DEFAULT_WEEKLY_SETTINGS = {
-    0: 120,  # 月曜日
-    1: 120,  # 火曜日
-    2: 120,  # 水曜日
-    3: 120,  # 木曜日
-    4: 120,  # 金曜日
-    5: 180,  # 土曜日
-    6: 180,  # 日曜日
-}
+from auth import (
+    get_authenticated_client,
+)
 
 
 # =====================================
-# DB接続
-# =====================================
-
-def get_connection():
-    DB_PATH.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    return sqlite3.connect(DB_PATH)
-
-
-# =====================================
-# DB初期化
+# 共通
 # =====================================
 
 def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS focus_sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        task_id INTEGER NOT NULL,
-        task_title TEXT NOT NULL,
-        started_at TEXT NOT NULL,
-        ended_at TEXT NOT NULL,
-        focused_minutes INTEGER NOT NULL
-    )
-""")
+    """
+    SQLite時代との互換用。
 
-    # -------------------------
-    # 課題
-    # -------------------------
+    Supabaseではテーブル作成は
+    Dashboard / SQL Editor側で行っているため、
+    ここでは何もしない。
+    """
+    return
 
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            deadline TEXT NOT NULL,
-            estimated_minutes INTEGER NOT NULL,
-            progress INTEGER NOT NULL DEFAULT 0,
-            completed INTEGER NOT NULL DEFAULT 0
-        )
-        """
+
+def get_current_user_id():
+    user_id = st.session_state.get(
+        "user_id"
     )
 
-    # 古いDBにも対応
-    cursor.execute(
-        "PRAGMA table_info(tasks)"
+    if not user_id:
+        raise RuntimeError(
+            "ログイン情報がありません。"
+        )
+
+    return user_id
+
+
+def get_db_client():
+    client = (
+        get_authenticated_client()
     )
 
-    columns = [
-        column[1]
-        for column in cursor.fetchall()
-    ]
-
-    if "progress" not in columns:
-        cursor.execute(
-            """
-            ALTER TABLE tasks
-            ADD COLUMN progress
-            INTEGER NOT NULL DEFAULT 0
-            """
+    if client is None:
+        raise RuntimeError(
+            "Supabaseに接続できません。"
+            "もう一度ログインしてください。"
         )
 
-    if "completed" not in columns:
-        cursor.execute(
-            """
-            ALTER TABLE tasks
-            ADD COLUMN completed
-            INTEGER NOT NULL DEFAULT 0
-            """
-        )
-
-    # -------------------------
-    # 曜日ごとの空き時間
-    # -------------------------
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS weekly_settings (
-            weekday INTEGER PRIMARY KEY,
-            available_minutes INTEGER NOT NULL
-        )
-        """
-    )
-
-    for weekday, minutes in (
-        DEFAULT_WEEKLY_SETTINGS.items()
-    ):
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO weekly_settings (
-                weekday,
-                available_minutes
-            )
-            VALUES (?, ?)
-            """,
-            (
-                weekday,
-                minutes,
-            ),
-        )
-
-    # -------------------------
-    # 特定日の空き時間
-    # -------------------------
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS date_overrides (
-            date TEXT PRIMARY KEY,
-            available_minutes INTEGER NOT NULL
-        )
-        """
-    )
-
-    conn.commit()
-    conn.close()
+    return client
 
 
 # =====================================
-# 課題追加
+# 課題
 # =====================================
 
 def add_task(
@@ -149,92 +61,108 @@ def add_task(
     deadline,
     estimated_minutes,
 ):
-    conn = get_connection()
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        INSERT INTO tasks (
-            title,
-            deadline,
-            estimated_minutes,
-            progress,
-            completed
-        )
-        VALUES (?, ?, ?, 0, 0)
-        """,
-        (
-            title,
-            deadline,
-            estimated_minutes,
-        ),
-    )
+    client.table(
+        "tasks"
+    ).insert(
+        {
+            "user_id": user_id,
+            "title": title,
+            "deadline": deadline,
+            "estimated_minutes": (
+                estimated_minutes
+            ),
+            "progress": 0,
+        }
+    ).execute()
 
-    conn.commit()
-    conn.close()
-
-
-# =====================================
-# 未完了課題
-# =====================================
 
 def get_tasks():
-    conn = get_connection()
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        SELECT
-            id,
-            title,
-            deadline,
-            estimated_minutes,
-            progress
-        FROM tasks
-        WHERE completed = 0
-        ORDER BY deadline ASC
-        """
+    response = (
+        client.table(
+            "tasks"
+        )
+        .select(
+            "id,title,deadline,"
+            "estimated_minutes,progress"
+        )
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .lt(
+            "progress",
+            100,
+        )
+        .order(
+            "deadline",
+        )
+        .execute()
     )
 
-    tasks = cursor.fetchall()
+    tasks = []
 
-    conn.close()
+    for row in response.data:
+        tasks.append(
+            (
+                row["id"],
+                row["title"],
+                row["deadline"],
+                row["estimated_minutes"],
+                row["progress"],
+            )
+        )
 
     return tasks
 
-
-# =====================================
-# 完了済み課題
-# =====================================
 
 def get_completed_tasks():
-    conn = get_connection()
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        SELECT
-            id,
-            title,
-            deadline,
-            estimated_minutes,
-            progress
-        FROM tasks
-        WHERE completed = 1
-        ORDER BY deadline DESC
-        """
+    response = (
+        client.table(
+            "tasks"
+        )
+        .select(
+            "id,title,deadline,"
+            "estimated_minutes,progress"
+        )
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .eq(
+            "progress",
+            100,
+        )
+        .order(
+            "deadline",
+            desc=True,
+        )
+        .execute()
     )
 
-    tasks = cursor.fetchall()
+    completed_tasks = []
 
-    conn.close()
+    for row in response.data:
+        completed_tasks.append(
+            (
+                row["id"],
+                row["title"],
+                row["deadline"],
+                row["estimated_minutes"],
+                row["progress"],
+            )
+        )
 
-    return tasks
+    return completed_tasks
 
-
-# =====================================
-# 課題編集
-# =====================================
 
 def update_task(
     task_id,
@@ -242,268 +170,294 @@ def update_task(
     deadline,
     estimated_minutes,
 ):
-    conn = get_connection()
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        UPDATE tasks
-        SET
-            title = ?,
-            deadline = ?,
-            estimated_minutes = ?
-        WHERE id = ?
-        """,
-        (
-            title,
-            deadline,
-            estimated_minutes,
+    (
+        client.table(
+            "tasks"
+        )
+        .update(
+            {
+                "title": title,
+                "deadline": deadline,
+                "estimated_minutes": (
+                    estimated_minutes
+                ),
+            }
+        )
+        .eq(
+            "id",
             task_id,
-        ),
+        )
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .execute()
     )
 
-    conn.commit()
-    conn.close()
-
-
-# =====================================
-# 進捗更新
-# =====================================
 
 def update_progress(
     task_id,
     progress,
 ):
-    progress = max(
-        0,
-        min(100, progress),
-    )
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    completed = (
-        1 if progress >= 100 else 0
-    )
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        UPDATE tasks
-        SET
-            progress = ?,
-            completed = ?
-        WHERE id = ?
-        """,
-        (
-            progress,
-            completed,
+    (
+        client.table(
+            "tasks"
+        )
+        .update(
+            {
+                "progress": progress,
+            }
+        )
+        .eq(
+            "id",
             task_id,
-        ),
+        )
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .execute()
     )
 
-    conn.commit()
-    conn.close()
 
-
-# =====================================
-# 完了
-# =====================================
-
-def complete_task(task_id):
+def complete_task(
+    task_id,
+):
     update_progress(
         task_id,
         100,
     )
 
 
-# =====================================
-# 完了を取り消す
-# =====================================
+def restore_task(
+    task_id,
+):
+    """
+    完了済み課題を未完了へ戻す。
 
-def restore_task(task_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        UPDATE tasks
-        SET
-            completed = 0,
-            progress =
-                CASE
-                    WHEN progress >= 100 THEN 90
-                    ELSE progress
-                END
-        WHERE id = ?
-        """,
-        (task_id,),
+    90%へ戻して、
+    再び通常の課題として扱う。
+    """
+    update_progress(
+        task_id,
+        90,
     )
 
-    conn.commit()
-    conn.close()
 
+def delete_task(
+    task_id,
+):
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-# =====================================
-# 削除
-# =====================================
-
-def delete_task(task_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "DELETE FROM tasks WHERE id = ?",
-        (task_id,),
+    (
+        client.table(
+            "tasks"
+        )
+        .delete()
+        .eq(
+            "id",
+            task_id,
+        )
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .execute()
     )
-
-    conn.commit()
-    conn.close()
 
 
 def delete_all_completed_tasks():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        DELETE FROM tasks
-        WHERE progress = 100
-        """
+    (
+        client.table(
+            "tasks"
+        )
+        .delete()
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .eq(
+            "progress",
+            100,
+        )
+        .execute()
     )
-
-    conn.commit()
-    conn.close()
 
 
 # =====================================
-# 曜日ごとの空き時間
+# 毎週の空き時間
 # =====================================
 
 def get_weekly_settings():
-    conn = get_connection()
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        SELECT
-            weekday,
-            available_minutes
-        FROM weekly_settings
-        ORDER BY weekday
-        """
+    response = (
+        client.table(
+            "weekly_settings"
+        )
+        .select(
+            "weekday,available_minutes"
+        )
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .execute()
     )
 
-    settings = dict(
-        cursor.fetchall()
-    )
+    settings = {}
 
-    conn.close()
+    for row in response.data:
+        settings[
+            int(
+                row["weekday"]
+            )
+        ] = int(
+            row["available_minutes"]
+        )
 
     return settings
 
 
-def save_weekly_settings(settings):
-    conn = get_connection()
-    cursor = conn.cursor()
+def save_weekly_settings(
+    weekly_available_minutes,
+):
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    for weekday, minutes in (
-        settings.items()
+    rows = []
+
+    for (
+        weekday,
+        minutes,
+    ) in (
+        weekly_available_minutes.items()
     ):
-        cursor.execute(
-            """
-            INSERT INTO weekly_settings (
-                weekday,
-                available_minutes
-            )
-            VALUES (?, ?)
-
-            ON CONFLICT(weekday)
-            DO UPDATE SET
-                available_minutes =
-                excluded.available_minutes
-            """,
-            (
-                weekday,
-                minutes,
-            ),
+        rows.append(
+            {
+                "user_id": user_id,
+                "weekday": int(
+                    weekday
+                ),
+                "available_minutes": int(
+                    minutes
+                ),
+            }
         )
 
-    conn.commit()
-    conn.close()
+    if not rows:
+        return
+
+    (
+        client.table(
+            "weekly_settings"
+        )
+        .upsert(
+            rows,
+            on_conflict=(
+                "user_id,weekday"
+            ),
+        )
+        .execute()
+    )
 
 
 # =====================================
-# 特定日の空き時間
+# 日付ごとの空き時間変更
 # =====================================
 
 def get_date_overrides():
-    conn = get_connection()
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        SELECT
-            date,
-            available_minutes
-        FROM date_overrides
-        ORDER BY date
-        """
+    response = (
+        client.table(
+            "date_overrides"
+        )
+        .select(
+            "override_date,"
+            "available_minutes"
+        )
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .execute()
     )
 
-    overrides = dict(
-        cursor.fetchall()
-    )
+    overrides = {}
 
-    conn.close()
+    for row in response.data:
+        overrides[
+            row["override_date"]
+        ] = int(
+            row["available_minutes"]
+        )
 
     return overrides
 
 
 def save_date_override(
-    date,
+    date_string,
     available_minutes,
 ):
-    conn = get_connection()
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        INSERT INTO date_overrides (
-            date,
-            available_minutes
+    (
+        client.table(
+            "date_overrides"
         )
-        VALUES (?, ?)
-
-        ON CONFLICT(date)
-        DO UPDATE SET
-            available_minutes =
-            excluded.available_minutes
-        """,
-        (
-            date,
-            available_minutes,
-        ),
+        .upsert(
+            {
+                "user_id": user_id,
+                "override_date": date_string,
+                "available_minutes": int(
+                    available_minutes
+                ),
+            },
+            on_conflict=(
+                "user_id,override_date"
+            ),
+        )
+        .execute()
     )
 
-    conn.commit()
-    conn.close()
 
+def delete_date_override(
+    date_string,
+):
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-def delete_date_override(date):
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        DELETE FROM date_overrides
-        WHERE date = ?
-        """,
-        (date,),
+    (
+        client.table(
+            "date_overrides"
+        )
+        .delete()
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .eq(
+            "override_date",
+            date_string,
+        )
+        .execute()
     )
 
-    conn.commit()
-    conn.close()
-    
+
 # =====================================
 # 集中履歴
 # =====================================
@@ -515,59 +469,107 @@ def add_focus_session(
     ended_at,
     focused_minutes,
 ):
-    conn = get_connection()
-    cursor = conn.cursor()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    cursor.execute(
-        """
-        INSERT INTO focus_sessions (
-            task_id,
-            task_title,
-            started_at,
-            ended_at,
-            focused_minutes
+    # datetimeが渡ってきても
+    # 文字列が渡ってきても対応する
+    if isinstance(
+        started_at,
+        datetime,
+    ):
+        started_at = (
+            started_at.isoformat()
         )
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (
-            task_id,
-            task_title,
-            started_at,
-            ended_at,
-            focused_minutes,
-        ),
-    )
 
-    conn.commit()
-    conn.close()
+    if isinstance(
+        ended_at,
+        datetime,
+    ):
+        ended_at = (
+            ended_at.isoformat()
+        )
+
+    (
+        client.table(
+            "focus_sessions"
+        )
+        .insert(
+            {
+                "user_id": user_id,
+                "task_id": task_id,
+                "task_title": (
+                    task_title
+                ),
+                "started_at": (
+                    started_at
+                ),
+                "ended_at": ended_at,
+                "focused_minutes": int(
+                    focused_minutes
+                ),
+            }
+        )
+        .execute()
+    )
 
 
 def get_today_focus_summary():
-    today = datetime.now().date().isoformat()
+    client = get_db_client()
+    user_id = get_current_user_id()
 
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT
-            COALESCE(SUM(focused_minutes), 0),
-            COUNT(*)
-        FROM focus_sessions
-        WHERE started_at LIKE ?
-        """,
-        (
-            f"{today}%",
-        ),
+    today = (
+        datetime.now()
+        .date()
     )
 
-    total_minutes, session_count = (
-        cursor.fetchone()
+    tomorrow = (
+        today
+        + timedelta(
+            days=1
+        )
     )
 
-    conn.close()
+    response = (
+        client.table(
+            "focus_sessions"
+        )
+        .select(
+            "focused_minutes"
+        )
+        .eq(
+            "user_id",
+            user_id,
+        )
+        .gte(
+            "started_at",
+            today.isoformat(),
+        )
+        .lt(
+            "started_at",
+            tomorrow.isoformat(),
+        )
+        .execute()
+    )
+
+    total_minutes = sum(
+        int(
+            row[
+                "focused_minutes"
+            ]
+        )
+        for row in response.data
+    )
+
+    session_count = len(
+        response.data
+    )
 
     return {
-        "total_minutes": total_minutes,
-        "session_count": session_count,
+        "total_minutes": (
+            total_minutes
+        ),
+        "session_count": (
+            session_count
+        ),
     }
