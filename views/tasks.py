@@ -7,6 +7,7 @@ from db import (
     complete_task,
     restore_task,
     delete_task,
+    delete_all_completed_tasks,
 )
 
 from components import (
@@ -393,7 +394,6 @@ def render_active_tasks(
 # =====================================
 # 完了済み
 # =====================================
-
 def render_completed_tasks(
     completed_tasks,
 ):
@@ -402,6 +402,54 @@ def render_completed_tasks(
             "完了した課題はまだありません。"
         )
         return
+
+    # =====================================
+    # 完了済み課題を整理
+    # =====================================
+
+    with st.expander(
+        "🧹 完了済み課題を整理"
+    ):
+        st.caption(
+            f"現在、完了済みの課題が"
+            f"{len(completed_tasks)}件あります。"
+        )
+
+        st.write(
+            "不要になった完了済み課題を"
+            "まとめて削除できます。"
+        )
+
+        st.warning(
+            "削除した課題は元に戻せません。"
+        )
+
+        confirm_delete = st.checkbox(
+            "すべて削除しても大丈夫です",
+            key="confirm_delete_all_completed",
+        )
+
+        if st.button(
+            "🗑️ 完了済みをすべて削除",
+            use_container_width=True,
+            disabled=not confirm_delete,
+            key="delete_all_completed_tasks_button",
+        ):
+            delete_all_completed_tasks()
+
+            st.session_state[
+                "message"
+            ] = (
+                "完了済みの課題を整理しました。"
+            )
+
+            st.rerun()
+
+    st.write("")
+
+    # =====================================
+    # 完了済み課題一覧
+    # =====================================
 
     for task in completed_tasks:
         (
@@ -433,10 +481,7 @@ def render_completed_tasks(
             with col1:
                 if st.button(
                     "↩️ 未完了に戻す",
-                    key=(
-                        f"restore_task_"
-                        f"{task_id}"
-                    ),
+                    key=f"restore_task_{task_id}",
                     use_container_width=True,
                 ):
                     restore_task(
@@ -455,10 +500,7 @@ def render_completed_tasks(
             with col2:
                 if st.button(
                     "🗑️ 削除",
-                    key=(
-                        f"delete_completed_"
-                        f"{task_id}"
-                    ),
+                    key=f"delete_completed_{task_id}",
                     use_container_width=True,
                 ):
                     delete_task(
@@ -472,7 +514,6 @@ def render_completed_tasks(
                     )
 
                     st.rerun()
-
 
 # =====================================
 # 課題一覧

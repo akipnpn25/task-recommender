@@ -348,15 +348,27 @@ def restore_task(task_id):
 # =====================================
 
 def delete_task(task_id):
-    conn = get_connection()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "DELETE FROM tasks WHERE id = ?",
+        (task_id,),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def delete_all_completed_tasks():
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     cursor.execute(
         """
         DELETE FROM tasks
-        WHERE id = ?
-        """,
-        (task_id,),
+        WHERE progress = 100
+        """
     )
 
     conn.commit()
