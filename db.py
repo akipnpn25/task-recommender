@@ -1,5 +1,6 @@
 import sqlite3
 from pathlib import Path
+from datetime import datetime
 
 
 DB_PATH = Path("data/tasks.db")
@@ -35,6 +36,17 @@ def get_connection():
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
+    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS focus_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        task_id INTEGER NOT NULL,
+        task_title TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        ended_at TEXT NOT NULL,
+        focused_minutes INTEGER NOT NULL
+    )
+""")
 
     # -------------------------
     # 課題
@@ -479,3 +491,71 @@ def delete_date_override(date):
 
     conn.commit()
     conn.close()
+    
+# =====================================
+# 集中履歴
+# =====================================
+
+def add_focus_session(
+    task_id,
+    task_title,
+    started_at,
+    ended_at,
+    focused_minutes,
+):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO focus_sessions (
+            task_id,
+            task_title,
+            started_at,
+            ended_at,
+            focused_minutes
+        )
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            task_id,
+            task_title,
+            started_at,
+            ended_at,
+            focused_minutes,
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_today_focus_summary():
+    today = datetime.now().date().isoformat()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            COALESCE(SUM(focused_minutes), 0),
+            COUNT(*)
+        FROM focus_sessions
+        WHERE started_at LIKE ?
+        """,
+        (
+            f"{today}%",
+        ),
+    )
+
+    total_minutes, session_count = (
+        cursor.fetchone()
+    )
+
+    conn.close()
+
+    return {
+        "total_minutes": total_minutes,
+        "session_count": session_count,
+    }

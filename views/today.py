@@ -9,6 +9,8 @@ from recommender import (
 from db import (
     update_progress,
     complete_task,
+    add_focus_session,
+    get_today_focus_summary,
 )
 
 from components import (
@@ -37,11 +39,32 @@ def clear_focus_state():
 # =====================================
 # 集中後の振り返りを開始
 # =====================================
-
 def start_focus_result(
     task_id,
     task_title,
+    focused_minutes,
 ):
+
+    started_at = st.session_state.get(
+        "focus_started_at"
+    )
+
+    ended_at = (
+        datetime.now().isoformat()
+    )
+
+    # 集中実績を保存
+    if started_at is not None:
+
+        add_focus_session(
+            task_id,
+            task_title,
+            started_at,
+            ended_at,
+            focused_minutes,
+        )
+
+    # 振り返り画面へ
     st.session_state[
         "focus_result_mode"
     ] = True
@@ -53,6 +76,10 @@ def start_focus_result(
     st.session_state[
         "focus_result_task_title"
     ] = task_title
+
+    st.session_state[
+        "focus_result_minutes"
+    ] = focused_minutes
 
     clear_focus_state()
 
@@ -184,9 +211,10 @@ def render_focus_mode():
                 type="primary",
             ):
                 start_focus_result(
-                    task_id,
-                    task_title,
-                )
+    task_id,
+    task_title,
+    focus_minutes,
+)
 
                 st.rerun()
 
@@ -283,18 +311,27 @@ def render_focus_mode():
         # =================================
         # 途中で終了
         # =================================
-
         if st.button(
             "✓ ここで集中を終える",
             key="finish_focus_early",
             use_container_width=True,
             type="primary",
-        ):
+            ):
+            elapsed_seconds = (
+                datetime.now()
+                - started_at
+    ).total_seconds()
+            focused_minutes = max(
+                1,
+                round(
+                    elapsed_seconds / 60
+        ),
+    )
             start_focus_result(
                 task_id,
                 task_title,
-            )
-
+                focused_minutes,
+    )
             st.rerun()
 
         # =================================
@@ -321,6 +358,10 @@ def render_focus_mode():
 def render_focus_result(
     tasks,
 ):
+    focused_minutes = st.session_state.get(
+    "focus_result_minutes",
+    0,
+)
     task_id = st.session_state.get(
         "focus_result_task_id"
     )
@@ -400,6 +441,11 @@ def render_focus_result(
     st.markdown(
         "### 📈 どこまで進みましたか？"
     )
+    st.success(
+    "☕ 今回は"
+    f"{format_minutes(focused_minutes)}"
+    "集中しました！"
+)
 
     st.caption(
         f"集中前の進捗：{current_progress}%"
@@ -1611,13 +1657,43 @@ def render_today(
                 available_label
             ]
         )
+# =====================================
+# 今日の集中実績
+# =====================================
 
-    if not tasks:
-        st.info(
+    focus_summary = (
+    get_today_focus_summary()
+)
+    total_focus_minutes = (
+    focus_summary[
+        "total_minutes"
+    ]
+)
+    session_count = (
+    focus_summary[
+        "session_count"
+    ]
+)
+    st.write("")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric(
+        "☕ 今日の集中",
+        format_minutes(
+            total_focus_minutes
+        ),
+    )
+    with col2:
+        st.metric(
+        "集中した回数",
+        f"{session_count}回",
+    )
+        if not tasks:
+            st.info(
             "課題を登録すると、"
             "おすすめが表示されます。"
         )
-        return
+            return
 
     st.write("")
 
