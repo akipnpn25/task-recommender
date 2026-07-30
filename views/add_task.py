@@ -1,253 +1,407 @@
 import streamlit as st
-from datetime import datetime, time, timedelta
+from datetime import datetime, date, time, timedelta
 
 from db import add_task
 
-from components import (
-    TASK_TIME_OPTIONS,
-)
 
+# =====================================
+# 所要時間
+# =====================================
+
+TIME_OPTIONS = {
+    "30分": 30,
+    "1時間": 60,
+    "1時間30分": 90,
+    "2時間": 120,
+    "3時間": 180,
+    "4時間": 240,
+    "その他": None,
+}
+
+
+# =====================================
+# 課題追加画面
+# =====================================
 
 def render_add_task():
     st.subheader(
-        "新しい課題を追加"
+        "＋ 課題を追加"
     )
 
     st.caption(
-        "必要最低限の項目だけで登録できます。"
+        "まずは最低限だけ入力。"
+        "細かい設定は必要なときだけ変更できます。"
     )
 
     # =====================================
-    # 1. 課題名
+    # 基本情報
     # =====================================
 
-    new_title = (
-        st.text_input(
+    with st.container(
+        border=True
+    ):
+        st.markdown(
+            (
+                '<div class="section-kicker">'
+                'NEW TASK'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            (
+                '<div class="section-heading">'
+                '課題について教えてください'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+        # -------------------------
+        # 課題名
+        # -------------------------
+
+        title = st.text_input(
             "課題名",
             placeholder=(
                 "例：推薦システム最終課題"
             ),
-            key="new_task_title",
-        )
-    )
-
-    # =====================================
-    # 2. 締切日
-    # =====================================
-
-    new_deadline_date = (
-        st.date_input(
-            "締切日",
-            value=(
-                datetime.now().date()
-                + timedelta(days=1)
-            ),
-            key="new_deadline_date",
-        )
-    )
-
-    # =====================================
-    # 3. 締切時刻
-    # =====================================
-
-    specify_deadline_time = (
-        st.checkbox(
-            "⏰ 締切時刻を指定する",
-            key="specify_deadline_time",
-        )
-    )
-
-    if specify_deadline_time:
-        st.write(
-            "締切時刻"
+            key="add_task_title",
         )
 
-        (
-            hour_col,
-            minute_col,
-        ) = st.columns(2)
+        # -------------------------
+        # 締切
+        # -------------------------
 
-        with hour_col:
-            deadline_hour = (
-                st.selectbox(
-                    "時",
-                    options=list(
-                        range(24)
-                    ),
-                    index=23,
-                    key="new_deadline_hour",
-                    format_func=(
-                        lambda x:
-                        f"{x:02d}時"
-                    ),
+        st.write("")
+
+        st.markdown(
+            "**📅 締切**"
+        )
+
+        deadline_quick = (
+            st.segmented_control(
+                "締切の選択",
+                options=[
+                    "今日",
+                    "明日",
+                    "3日後",
+                    "1週間後",
+                    "日付を選ぶ",
+                ],
+                default="明日",
+                selection_mode="single",
+                key="add_deadline_quick",
+                label_visibility="collapsed",
+            )
+        )
+
+        today = date.today()
+
+        if deadline_quick == "今日":
+            deadline_date = today
+
+        elif deadline_quick == "明日":
+            deadline_date = (
+                today
+                + timedelta(
+                    days=1
                 )
             )
 
-        with minute_col:
-            minute_options = [
-                0,
-                5,
-                10,
-                15,
-                20,
-                25,
-                30,
-                35,
-                40,
-                45,
-                50,
-                55,
-                59,
-            ]
-
-            deadline_minute = (
-                st.selectbox(
-                    "分",
-                    options=(
-                        minute_options
-                    ),
-                    index=12,
-                    key="new_deadline_minute",
-                    format_func=(
-                        lambda x:
-                        f"{x:02d}分"
-                    ),
+        elif deadline_quick == "3日後":
+            deadline_date = (
+                today
+                + timedelta(
+                    days=3
                 )
             )
 
-        new_deadline_time = (
-            time(
-                deadline_hour,
-                deadline_minute,
-            )
-        )
-
-    else:
-        new_deadline_time = (
-            time(
-                23,
-                59,
-            )
-        )
-
-    # =====================================
-    # 4. 予想所要時間
-    # =====================================
-
-    new_estimated_label = (
-        st.selectbox(
-            "だいたいどれくらい"
-            "かかりそう？",
-            list(
-                TASK_TIME_OPTIONS.keys()
-            ),
-            index=3,
-            key="new_estimated_time",
-        )
-    )
-
-    if (
-        new_estimated_label
-        == "その他"
-    ):
-        st.write(
-            "予想所要時間"
-        )
-
-        (
-            duration_hour_col,
-            duration_minute_col,
-        ) = st.columns(2)
-
-        with duration_hour_col:
-            custom_hours = (
-                st.selectbox(
-                    "時間",
-                    options=list(
-                        range(0, 25)
-                    ),
-                    index=6,
-                    key="new_custom_hours",
-                    format_func=(
-                        lambda x:
-                        f"{x}時間"
-                    ),
+        elif deadline_quick == "1週間後":
+            deadline_date = (
+                today
+                + timedelta(
+                    days=7
                 )
-            )
-
-        with duration_minute_col:
-            duration_minute_options = [
-                0,
-                15,
-                30,
-                45,
-            ]
-
-            custom_minutes = (
-                st.selectbox(
-                    "分",
-                    options=(
-                        duration_minute_options
-                    ),
-                    index=0,
-                    key="new_custom_minutes",
-                    format_func=(
-                        lambda x:
-                        f"{x}分"
-                    ),
-                )
-            )
-
-        new_estimated_minutes = (
-            custom_hours * 60
-            + custom_minutes
-        )
-
-    else:
-        new_estimated_minutes = (
-            TASK_TIME_OPTIONS[
-                new_estimated_label
-            ]
-        )
-
-    # =====================================
-    # 5. 追加
-    # =====================================
-
-    if st.button(
-        "課題を追加する",
-        use_container_width=True,
-        key="add_task_button",
-    ):
-        if not new_title.strip():
-            st.error(
-                "課題名を入力してください。"
-            )
-
-        elif new_estimated_minutes <= 0:
-            st.error(
-                "予想所要時間を設定してください。"
             )
 
         else:
-            deadline = (
-                datetime.combine(
-                    new_deadline_date,
-                    new_deadline_time,
+            deadline_date = (
+                st.date_input(
+                    "締切日",
+                    value=(
+                        today
+                        + timedelta(
+                            days=1
+                        )
+                    ),
+                    min_value=today,
+                    key="add_deadline_date",
                 )
             )
 
+        st.caption(
+            "締切日："
+            f"{deadline_date.strftime('%m/%d')}"
+        )
+        
+        # -------------------------
+        # 締切時刻
+        # -------------------------
+
+        st.write("")
+
+        st.markdown(
+            "**🕒 締切時刻**"
+        )
+
+        time_setting = (
+            st.segmented_control(
+                "締切時刻",
+                options=[
+                    "指定しない",
+                    "指定する",
+                ],
+                default="指定しない",
+                selection_mode="single",
+                key="add_time_setting",
+                label_visibility="collapsed",
+            )
+        )
+
+        if time_setting == "指定する":
+
+            time_col1, time_col2 = (
+                st.columns(2)
+            )
+
+            with time_col1:
+
+                deadline_hour = (
+                    st.selectbox(
+                        "時",
+                        options=list(
+                            range(24)
+                        ),
+                        index=23,
+                        key="add_deadline_hour",
+                    )
+                )
+
+            with time_col2:
+
+                deadline_minute = (
+                    st.selectbox(
+                        "分",
+                        options=[
+                            0,
+                            15,
+                            30,
+                            45,
+                            59,
+                        ],
+                        index=4,
+                        key="add_deadline_minute",
+                    )
+                )
+
+        else:
+
+            deadline_hour = 23
+            deadline_minute = 59
+
+            st.caption(
+                "指定しない場合は23:59になります。"
+            )
+
+        # -------------------------
+        # 予想所要時間
+        # -------------------------
+
+        st.write("")
+
+        st.markdown(
+            "**⏱️ だいたい何時間かかりそう？**"
+        )
+
+        selected_time = (
+            st.segmented_control(
+                "予想所要時間",
+                options=list(
+                    TIME_OPTIONS.keys()
+                ),
+                default="1時間",
+                selection_mode="single",
+                key="add_estimated_time",
+                label_visibility="collapsed",
+            )
+        )
+
+        estimated_minutes = (
+            TIME_OPTIONS[
+                selected_time
+            ]
+        )
+
+        # =====================================
+        # その他の時間
+        # =====================================
+
+        if selected_time == "その他":
+            custom_col1, custom_col2 = (
+                st.columns(2)
+            )
+
+            with custom_col1:
+                custom_hours = (
+                    st.number_input(
+                        "時間",
+                        min_value=0,
+                        max_value=24,
+                        value=1,
+                        step=1,
+                        key="add_custom_hours",
+                    )
+                )
+
+            with custom_col2:
+                custom_minutes = (
+                    st.selectbox(
+                        "分",
+                        options=[
+                            0,
+                            15,
+                            30,
+                            45,
+                        ],
+                        key="add_custom_minutes",
+                    )
+                )
+
+            estimated_minutes = (
+                custom_hours
+                * 60
+                + custom_minutes
+            )
+
+    # =====================================
+    # 入力内容の確認
+    # =====================================
+
+    st.write("")
+
+    deadline_dt = datetime.combine(
+        deadline_date,
+        time(
+            deadline_hour,
+            deadline_minute,
+        ),
+    )
+
+    if estimated_minutes is None:
+        estimated_minutes = 0
+
+    summary_title = (
+        title.strip()
+        if title.strip()
+        else "課題名未入力"
+    )
+
+    with st.container(
+        border=True
+    ):
+        st.markdown(
+            "**追加する内容**"
+        )
+
+        st.write(
+            f"📝 {summary_title}"
+        )
+
+        st.caption(
+            "📅 "
+            f"{deadline_dt.strftime('%m/%d %H:%M')}"
+            "　・　"
+            "⏱️ "
+            f"{format_estimated_time(estimated_minutes)}"
+        )
+
+        # =====================================
+        # 追加
+        # =====================================
+
+        if st.button(
+            "＋ この課題を追加",
+            use_container_width=True,
+            type="primary",
+            key="add_task_submit",
+        ):
+            if not title.strip():
+                st.error(
+                    "課題名を入力してください。"
+                )
+                return
+
+            if estimated_minutes <= 0:
+                st.error(
+                    "所要時間を1分以上にしてください。"
+                )
+                return
+
+            if deadline_dt <= datetime.now():
+                st.error(
+                    "締切は現在より後の日時を"
+                    "設定してください。"
+                )
+                return
+
             add_task(
-                new_title.strip(),
-                deadline.isoformat(),
-                new_estimated_minutes,
+                title.strip(),
+                deadline_dt.isoformat(),
+                estimated_minutes,
             )
 
             st.session_state[
                 "message"
             ] = (
-                f"「{new_title}」を"
-                "追加しました！"
+                f"「{title.strip()}」を追加しました ☕"
             )
 
             st.rerun()
+
+
+# =====================================
+# 時間表示
+# =====================================
+
+def format_estimated_time(
+    minutes,
+):
+    if minutes <= 0:
+        return "未設定"
+
+    hours = (
+        minutes
+        // 60
+    )
+
+    remaining_minutes = (
+        minutes
+        % 60
+    )
+
+    if hours == 0:
+        return (
+            f"{remaining_minutes}分"
+        )
+
+    if remaining_minutes == 0:
+        return (
+            f"{hours}時間"
+        )
+
+    return (
+        f"{hours}時間"
+        f"{remaining_minutes}分"
+    )
