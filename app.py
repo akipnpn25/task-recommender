@@ -720,28 +720,43 @@ weekly_available_minutes = (
 
 
 # =====================================
-# ナビゲーション
+# 集中中・振り返り中
 # =====================================
 
-page = st.segmented_control(
-    "ページ",
-    options=[
-        "☕ 今日",
-        "📅 見通し",
-        "📚 課題一覧",
-        "＋ 課題を追加",
-    ],
-    default="☕ 今日",
-    selection_mode="single",
-    label_visibility="collapsed",
+is_focus_mode = st.session_state.get(
+    "focus_mode",
+    False,
+)
+
+is_focus_result_mode = st.session_state.get(
+    "focus_result_mode",
+    False,
 )
 
 
-# =====================================
-# ページ表示
-# =====================================
+if (
+    is_focus_mode
+    or is_focus_result_mode
+):
+    
+    if (
+    is_focus_mode
+    or is_focus_result_mode
+):
+        st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {
+            display: none;
+        }
 
-if page == "☕ 今日":
+        [data-testid="stSidebarCollapsedControl"] {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     render_today(
         tasks,
@@ -749,20 +764,52 @@ if page == "☕ 今日":
         date_overrides,
     )
 
-elif page == "📅 見通し":
 
-    render_outlook(
-        tasks,
-        weekly_available_minutes,
-        date_overrides,
+else:
+
+    # =====================================
+    # 通常ナビゲーション
+    # =====================================
+
+    page = st.segmented_control(
+        "ページ",
+        options=[
+            "☕ 今日",
+            "📅 見通し",
+            "📚 課題一覧",
+            "＋ 課題を追加",
+        ],
+        default="☕ 今日",
+        selection_mode="single",
+        label_visibility="collapsed",
     )
 
-elif page == "📚 課題一覧":
 
-    render_tasks(
-        tasks
-    )
+    if page == "☕ 今日":
 
-elif page == "＋ 課題を追加":
+        render_today(
+            tasks,
+            weekly_available_minutes,
+            date_overrides,
+        )
 
-    render_add_task()
+
+    elif page == "📅 見通し":
+
+        render_outlook(
+            tasks,
+            weekly_available_minutes,
+            date_overrides,
+        )
+
+
+    elif page == "📚 課題一覧":
+
+        render_tasks(
+            tasks
+        )
+
+
+    elif page == "＋ 課題を追加":
+
+        render_add_task()
