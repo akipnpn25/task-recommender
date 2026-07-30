@@ -37,14 +37,89 @@ def render_sidebar(
     weekly_available_minutes = {}
 
     with st.sidebar:
-        st.header("⚙️ 設定")
+
+        # =====================================
+        # サイドバー上部
+        # =====================================
+
+        st.markdown(
+            "## ☕ 今やる課題推薦"
+        )
+
+        st.caption(
+            "「何からやろう？」を"
+            "空き時間と締切から決めるアプリ"
+        )
+
+        # =====================================
+        # 使い方
+        # =====================================
+
+        with st.expander(
+            "📖 このアプリの使い方"
+        ):
+            st.markdown(
+                """
+**① 課題を登録する**  
+「＋ 課題を追加」から、
+締切と予想所要時間を登録します。
+
+**② 普段の空き時間を設定する**  
+このサイドバーで、
+曜日ごとに課題へ使える時間を設定します。
+
+**③ 「今日」でおすすめを見る**  
+今使える時間を選ぶと、
+今取り組む課題をおすすめします。
+
+**④ そのまま集中する**  
+「☕ ○分だけ始める」から
+集中モードを開始できます。
+
+**⑤ 終わったら進捗を記録する**  
+進み具合を更新すると、
+次のおすすめにも反映されます。
+
+**⑥ 「見通し」で今後を確認する**  
+課題量と空き時間を比べて、
+時間不足になりそうな日を確認できます。
+                """
+            )
+
+        with st.expander(
+            "💡 おすすめの使い方"
+        ):
+            st.write(
+                "最初に課題をまとめて登録したら、"
+                "普段は「☕ 今日」を開くだけでOKです。"
+            )
+
+            st.write(
+                "予定が変わった日だけ"
+                "「📅 今週だけ変更」を使うと、"
+                "より実際の予定に合った推薦になります。"
+            )
+
+        st.divider()
+
+        # =====================================
+        # 作業時間の設定
+        # =====================================
+
+        st.markdown(
+            "### ⚙️ 作業時間の設定"
+        )
+
+        st.caption(
+            "おすすめと見通しの計算に使います。"
+        )
 
         # =====================================
         # 普段の空き時間
         # =====================================
 
         with st.expander(
-            "普段の空き時間"
+            "📆 普段の空き時間"
         ):
             st.caption(
                 "各曜日に普段どれくらい"
@@ -74,15 +149,17 @@ def render_sidebar(
                 except ValueError:
                     default_index = 3
 
-                selected_minutes = st.selectbox(
-                    weekday_name,
-                    weekly_time_values,
-                    index=default_index,
-                    format_func=format_minutes,
-                    key=(
-                        f"weekday_"
-                        f"{weekday_index}"
-                    ),
+                selected_minutes = (
+                    st.selectbox(
+                        weekday_name,
+                        weekly_time_values,
+                        index=default_index,
+                        format_func=format_minutes,
+                        key=(
+                            f"weekday_"
+                            f"{weekday_index}"
+                        ),
+                    )
                 )
 
                 weekly_available_minutes[
@@ -119,26 +196,34 @@ def render_sidebar(
 
             tomorrow = (
                 datetime.now().date()
-                + timedelta(days=1)
+                + timedelta(
+                    days=1
+                )
             )
 
-            override_date = st.date_input(
-                "変更する日",
-                value=tomorrow,
-                min_value=tomorrow,
-                max_value=(
-                    datetime.now().date()
-                    + timedelta(days=7)
-                ),
-                key="override_date",
+            override_date = (
+                st.date_input(
+                    "変更する日",
+                    value=tomorrow,
+                    min_value=tomorrow,
+                    max_value=(
+                        datetime.now().date()
+                        + timedelta(
+                            days=7
+                        )
+                    ),
+                    key="override_date",
+                )
             )
 
-            override_minutes = st.selectbox(
-                "その日に使える時間",
-                weekly_time_values,
-                index=3,
-                format_func=format_minutes,
-                key="override_minutes",
+            override_minutes = (
+                st.selectbox(
+                    "その日に使える時間",
+                    weekly_time_values,
+                    index=3,
+                    format_func=format_minutes,
+                    key="override_minutes",
+                )
             )
 
             if st.button(
@@ -160,9 +245,9 @@ def render_sidebar(
 
                 st.rerun()
 
-            # -------------------------
+            # =====================================
             # 変更済みの日
-            # -------------------------
+            # =====================================
 
             future_overrides = []
 
@@ -202,8 +287,11 @@ def render_sidebar(
                     date_object,
                     minutes,
                 ) in future_overrides:
-                    col1, col2 = st.columns(
-                        [3, 1]
+
+                    col1, col2 = (
+                        st.columns(
+                            [3, 1]
+                        )
                     )
 
                     with col1:
@@ -222,6 +310,13 @@ def render_sidebar(
                         ):
                             delete_date_override(
                                 date_string
+                            )
+
+                            st.session_state[
+                                "message"
+                            ] = (
+                                f"{date_object.strftime('%m/%d')}の"
+                                "変更を解除しました。"
                             )
 
                             st.rerun()
