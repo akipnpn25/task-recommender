@@ -561,6 +561,72 @@ with st.container(
         font-size: 28px;
     }
 }
+/* =====================================
+   集中終了後
+===================================== */
+
+.focus-result-card {
+    max-width: 650px;
+
+    margin:
+        35px auto 25px auto;
+
+    padding:
+        42px 35px;
+
+    text-align: center;
+
+    background:
+        linear-gradient(
+            145deg,
+            #FFFDF9 0%,
+            #EDF1E8 100%
+        );
+
+    border:
+        1px solid #CCD4C4;
+
+    border-radius:
+        26px;
+
+    box-shadow:
+        0 10px 30px
+        rgba(67, 52, 40, 0.08);
+}
+
+.focus-result-icon {
+    font-size: 42px;
+
+    margin-bottom: 8px;
+}
+
+.focus-result-title {
+    font-size: 28px;
+
+    font-weight: 750;
+
+    color: #384033;
+
+    margin-bottom: 10px;
+}
+
+.focus-result-task {
+    font-size: 19px;
+
+    font-weight: 700;
+
+    color: #463D36;
+
+    margin-bottom: 18px;
+}
+
+.focus-result-message {
+    font-size: 14px;
+
+    color: #756C65;
+
+    line-height: 1.8;
+}
 
     </style>
     """,

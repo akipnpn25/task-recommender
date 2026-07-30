@@ -34,7 +34,27 @@ def clear_focus_state():
             key,
             None,
         )
+# =====================================
+# 集中後の振り返りを開始
+# =====================================
 
+def start_focus_result(
+    task_id,
+    task_title,
+):
+    st.session_state[
+        "focus_result_mode"
+    ] = True
+
+    st.session_state[
+        "focus_result_task_id"
+    ] = task_id
+
+    st.session_state[
+        "focus_result_task_title"
+    ] = task_title
+
+    clear_focus_state()
 
 # =====================================
 # 集中モード
@@ -42,6 +62,10 @@ def clear_focus_state():
 
 def render_focus_mode():
     """課題に取り組んでいる間の集中画面"""
+
+    task_id = st.session_state.get(
+        "focus_task_id"
+    )
 
     task_title = st.session_state.get(
         "focus_task_title",
@@ -57,8 +81,11 @@ def render_focus_mode():
         30,
     )
 
-    # 開始時刻がなければ通常画面へ戻す
-    if started_at_text is None:
+    # 必要な情報がなければ通常画面に戻す
+    if (
+        task_id is None
+        or started_at_text is None
+    ):
         clear_focus_state()
         st.rerun()
 
@@ -93,7 +120,7 @@ def render_focus_mode():
     st.write("")
 
     # =====================================
-    # 1秒ごとに更新するタイマー
+    # カウントダウン
     # =====================================
 
     @st.fragment(
@@ -116,7 +143,7 @@ def render_focus_mode():
         )
 
         # =================================
-        # 時間終了
+        # タイマー終了
         # =================================
 
         if remaining_seconds <= 0:
@@ -147,7 +174,7 @@ def render_focus_mode():
 
             st.success(
                 "☕ 集中時間終了！"
-                "どのくらい進んだか確認してみよう。"
+                "どのくらい進んだか記録してみよう。"
             )
 
             if st.button(
@@ -156,16 +183,19 @@ def render_focus_mode():
                 use_container_width=True,
                 type="primary",
             ):
-
-                clear_focus_state()
-
-                st.session_state[
-                    "message"
-                ] = (
-                    "おつかれさま ☕ "
-                    "進捗を更新してみよう。"
+                start_focus_result(
+                    task_id,
+                    task_title,
                 )
 
+                st.rerun()
+
+            if st.button(
+                "進捗を記録せず戻る",
+                key="finish_focus_without_result",
+                use_container_width=True,
+            ):
+                clear_focus_state()
                 st.rerun()
 
             return
@@ -212,7 +242,7 @@ def render_focus_mode():
         )
 
         # =================================
-        # 集中カード
+        # 集中画面
         # =================================
 
         st.markdown(
@@ -260,30 +290,251 @@ def render_focus_mode():
             use_container_width=True,
             type="primary",
         ):
-
-            clear_focus_state()
-
-            st.session_state[
-                "message"
-            ] = (
-                "おつかれさま ☕ "
-                "どのくらい進んだか更新してみよう。"
+            start_focus_result(
+                task_id,
+                task_title,
             )
 
             st.rerun()
 
+        # =================================
+        # 中断
+        # =================================
+
         if st.button(
-            "中断しておすすめ画面に戻る",
+            "← 中断しておすすめ画面に戻る",
             key="cancel_focus",
             use_container_width=True,
         ):
-
             clear_focus_state()
 
             st.rerun()
 
+    # これがないとタイマー自体が表示されない
     render_countdown()
 
+
+# =====================================
+# 集中終了後の振り返り
+# =====================================
+
+def render_focus_result(
+    tasks,
+):
+    task_id = st.session_state.get(
+        "focus_result_task_id"
+    )
+
+    task_title = st.session_state.get(
+        "focus_result_task_title",
+        "課題",
+    )
+
+    # =====================================
+    # 対象課題を取得
+    # =====================================
+
+    target_task = next(
+        (
+            task
+            for task in tasks
+            if task[0] == task_id
+        ),
+        None,
+    )
+
+    if target_task is None:
+
+        st.session_state[
+            "focus_result_mode"
+        ] = False
+
+        st.session_state.pop(
+            "focus_result_task_id",
+            None,
+        )
+
+        st.session_state.pop(
+            "focus_result_task_title",
+            None,
+        )
+
+        st.rerun()
+
+    current_progress = (
+        target_task[4]
+    )
+
+    # =====================================
+    # 振り返りカード
+    # =====================================
+
+    st.markdown(
+        (
+            '<div class="focus-result-card">'
+            '<div class="focus-result-icon">'
+            '☕'
+            '</div>'
+            '<div class="focus-result-title">'
+            'おつかれさま！'
+            '</div>'
+            '<div class="focus-result-task">'
+            f'{task_title}'
+            '</div>'
+            '<div class="focus-result-message">'
+            '集中できたね。'
+            '<br>'
+            '今の進み具合を記録しておこう。'
+            '</div>'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
+
+    st.write("")
+
+    # =====================================
+    # 進捗
+    # =====================================
+
+    st.markdown(
+        "### 📈 どこまで進みましたか？"
+    )
+
+    st.caption(
+        f"集中前の進捗：{current_progress}%"
+    )
+
+    progress_options = {
+        "1割": 10,
+        "2割": 20,
+        "3割": 30,
+        "4割": 40,
+        "5割": 50,
+        "6割": 60,
+        "7割": 70,
+        "8割": 80,
+        "9割": 90,
+    }
+
+    selected_label = (
+        st.segmented_control(
+            "進捗",
+            options=list(
+                progress_options.keys()
+            ),
+            selection_mode="single",
+            key="focus_result_progress",
+            width="stretch",
+            label_visibility="collapsed",
+        )
+    )
+
+    st.write("")
+
+    # =====================================
+    # 保存
+    # =====================================
+
+    if selected_label is not None:
+
+        new_progress = (
+            progress_options[
+                selected_label
+            ]
+        )
+
+        if st.button(
+            "進捗を保存しておすすめを見る",
+            key="save_focus_result",
+            use_container_width=True,
+            type="primary",
+        ):
+            update_progress(
+                task_id,
+                new_progress,
+            )
+
+            st.session_state[
+                "focus_result_mode"
+            ] = False
+
+            st.session_state.pop(
+                "focus_result_task_id",
+                None,
+            )
+
+            st.session_state.pop(
+                "focus_result_task_title",
+                None,
+            )
+
+            st.session_state[
+                "message"
+            ] = (
+                f"「{task_title}」の進捗を"
+                f"{selected_label}に更新しました ☕"
+            )
+
+            st.rerun()
+
+    # =====================================
+    # 完了
+    # =====================================
+
+    if st.button(
+        "✓ この課題は完了した！",
+        key="complete_focus_result",
+        use_container_width=True,
+    ):
+        complete_task(
+            task_id
+        )
+
+        st.session_state[
+            "focus_result_mode"
+        ] = False
+
+        st.session_state.pop(
+            "focus_result_task_id",
+            None,
+        )
+
+        st.session_state.pop(
+            "focus_result_task_title",
+            None,
+        )
+
+        st.session_state[
+            "celebrate_task"
+        ] = task_title
+
+        st.rerun()
+
+    # =====================================
+    # 進捗を変えない
+    # =====================================
+
+    if st.button(
+        "今回は進捗を変えない",
+        key="skip_focus_result",
+        use_container_width=True,
+    ):
+        st.session_state[
+            "focus_result_mode"
+        ] = False
+
+        st.session_state.pop(
+            "focus_result_task_id",
+            None,
+        )
+
+        st.session_state.pop(
+            "focus_result_task_title",
+            None,
+        )
+
+        st.rerun()
 # =====================================
 # 今週の課題全体の見通し
 # =====================================
@@ -1269,12 +1520,24 @@ def render_other_recommendations(
 # =====================================
 # 今日画面
 # =====================================
-
 def render_today(
     tasks,
     weekly_available_minutes,
     date_overrides,
 ):
+
+    # =====================================
+    # 集中終了後の振り返り
+    # =====================================
+
+    if st.session_state.get(
+        "focus_result_mode",
+        False,
+    ):
+        render_focus_result(
+            tasks
+        )
+        return
 
     # =====================================
     # 集中モード
@@ -1284,19 +1547,16 @@ def render_today(
         "focus_mode",
         False,
     ):
-
         render_focus_mode()
-
         return
 
     # =====================================
-    # 今使える時間
+    # ここから通常の「今日」画面
     # =====================================
 
     with st.container(
         border=True
     ):
-
         st.markdown(
             (
                 '<div class="section-kicker">'
@@ -1335,19 +1595,15 @@ def render_today(
             "3時間": 180,
         }
 
-        available_label = (
-            st.radio(
-                "今使える時間",
-                list(
-                    available_options.keys()
-                ),
-                index=3,
-                horizontal=True,
-                key="available_time",
-                label_visibility=(
-                    "collapsed"
-                ),
-            )
+        available_label = st.radio(
+            "今使える時間",
+            list(
+                available_options.keys()
+            ),
+            index=3,
+            horizontal=True,
+            key="available_time",
+            label_visibility="collapsed",
         )
 
         available_minutes = (
@@ -1357,12 +1613,10 @@ def render_today(
         )
 
     if not tasks:
-
         st.info(
             "課題を登録すると、"
             "おすすめが表示されます。"
         )
-
         return
 
     st.write("")
@@ -1374,7 +1628,6 @@ def render_today(
     with st.container(
         border=True
     ):
-
         render_week_outlook(
             tasks,
             available_minutes,
@@ -1388,22 +1641,16 @@ def render_today(
     # 推薦
     # =====================================
 
-    recommendations = (
-        recommend_tasks(
-            tasks,
-            available_minutes,
-            weekly_available_minutes,
-            date_overrides,
-        )
+    recommendations = recommend_tasks(
+        tasks,
+        available_minutes,
+        weekly_available_minutes,
+        date_overrides,
     )
 
     top_recommendations = (
         recommendations[:3]
     )
-
-    # =====================================
-    # 1位
-    # =====================================
 
     (
         best_task_id,
@@ -1414,19 +1661,11 @@ def render_today(
         available_minutes,
     )
 
-    # =====================================
-    # 進捗
-    # =====================================
-
     render_best_progress(
         best_task_id,
         best_title,
         best_progress,
     )
-
-    # =====================================
-    # 2位・3位
-    # =====================================
 
     render_other_recommendations(
         top_recommendations
