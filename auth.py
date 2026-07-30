@@ -168,7 +168,11 @@ def save_auth_session(
     auth_response,
     persist_cookie=True,
 ):
-    """Supabaseの認証情報をSession Stateへ保存する。"""
+    """
+    Supabaseの認証情報を
+    Session Stateへ保存する。
+    """
+
     session = getattr(
         auth_response,
         "session",
@@ -181,30 +185,51 @@ def save_auth_session(
         None,
     )
 
-    # refresh_session()などでは、userがsession側にある場合がある。
-    if user is None and session is not None:
+    if (
+        user is None
+        and session is not None
+    ):
         user = getattr(
             session,
             "user",
             None,
         )
 
-    if session is None or user is None:
+    if (
+        session is None
+        or user is None
+    ):
         return False
 
-    st.session_state["supabase_access_token"] = (
-        session.access_token
-    )
-    st.session_state["supabase_refresh_token"] = (
-        session.refresh_token
-    )
-    st.session_state["user_id"] = user.id
-    st.session_state["user_email"] = user.email
+    st.session_state[
+        "supabase_access_token"
+    ] = session.access_token
+
+    st.session_state[
+        "supabase_refresh_token"
+    ] = session.refresh_token
+
+    st.session_state[
+        "user_id"
+    ] = user.id
+
+    st.session_state[
+        "user_email"
+    ] = user.email
 
     if persist_cookie:
-        save_refresh_cookie(
-            session.refresh_token,
-        )
+        try:
+            save_refresh_cookie(
+                session.refresh_token
+            )
+
+        except Exception as error:
+            # Cookie保存に失敗しても、
+            # アカウント作成・ログインは成功扱いにする
+            print(
+                "[auth] Cookie保存に失敗しました:",
+                error,
+            )
 
     return True
 
@@ -514,37 +539,52 @@ def render_login_form():
 # =====================================
 
 def render_signup_form():
-    with st.form("signup_form"):
+    with st.form(
+        "signup_form"
+    ):
         email = st.text_input(
             "メールアドレス",
-            placeholder="example@email.com",
+            placeholder=(
+                "example@email.com"
+            ),
         )
 
         password = st.text_input(
             "パスワード",
             type="password",
-            help="6文字以上のパスワードを設定してください。",
+            help=(
+                "6文字以上のパスワードを"
+                "設定してください。"
+            ),
         )
 
-        password_confirm = st.text_input(
-            "パスワード（確認）",
-            type="password",
+        password_confirm = (
+            st.text_input(
+                "パスワード（確認）",
+                type="password",
+            )
         )
 
-        submitted = st.form_submit_button(
-            "アカウントを作成",
-            use_container_width=True,
-            type="primary",
+        submitted = (
+            st.form_submit_button(
+                "アカウントを作成",
+                use_container_width=True,
+                type="primary",
+            )
         )
 
     if not submitted:
         return
 
-    email = email.strip().lower()
+    email = (
+        email.strip()
+        .lower()
+    )
 
     if not email:
         st.error(
-            "メールアドレスを入力してください。"
+            "メールアドレスを"
+            "入力してください。"
         )
         return
 
@@ -555,63 +595,120 @@ def render_signup_form():
         )
         return
 
-    if password != password_confirm:
+    if (
+        password
+        != password_confirm
+    ):
         st.error(
-            "確認用パスワードが一致していません。"
+            "確認用パスワードが"
+            "一致していません。"
         )
         return
 
+    # =====================================
+    # Supabaseへのアカウント登録
+    # =====================================
+
     try:
-        client = create_supabase_client()
-        response = client.auth.sign_up(
-            {
-                "email": email,
-                "password": password,
-            }
+        client = (
+            create_supabase_client()
         )
 
-        # メール確認が無効なら、そのままログインできる。
-        if response.session is not None:
-            if save_auth_session(
-                response,
-                persist_cookie=True,
-            ):
-                st.rerun()
-
-            st.error(
-                "登録後のログイン処理に失敗しました。"
+        response = (
+            client.auth.sign_up(
+                {
+                    "email": email,
+                    "password": password,
+                }
             )
-            return
-
-        # メール確認が有効な場合。
-        st.success(
-            "登録を受け付けました。"
-            "確認メールが届いた場合は、"
-            "メール内のリンクを開いてください ☕"
-        )
-        st.info(
-            "すでに登録済みの場合は、"
-            "「ログイン」に切り替えてお試しください。"
         )
 
     except Exception as error:
-        if is_duplicate_signup_error(error):
+        if is_duplicate_signup_error(
+            error
+        ):
             st.warning(
                 "このメールアドレスは、"
-                "すでに登録済み、または確認待ちの"
-                "可能性があります。"
+                "すでに登録済み、または"
+                "確認待ちの可能性があります。"
             )
+
             st.info(
-                "「ログイン」に切り替えてお試しください。"
-                "確認メールが届いている場合は、"
-                "メール内のリンクも開いてください。"
+                "「ログイン」に切り替えて"
+                "お試しください。"
             )
+
             return
 
         st.error(
-            "アカウントを作成できませんでした。"
-            "時間をおいて、もう一度お試しください。"
+            "アカウントを"
+            "作成できませんでした。"
+            "時間をおいて、"
+            "もう一度お試しください。"
         )
+
+        print(
+            "[auth] 新規登録エラー:",
+            error,
+        )
+
+        return
+
+    # =====================================
+    # ここまで来たらアカウント登録は成功
+    # =====================================
+
+    if response.user is None:
+        st.error(
+            "登録結果を確認できませんでした。"
+            "もう一度ログインを"
+            "お試しください。"
+        )
+        return
+
+    # メール確認が無効の場合は
+    # sessionも返るため、そのままログイン
+    if response.session is not None:
+        login_saved = (
+            save_auth_session(
+                response,
+                persist_cookie=True,
+            )
+        )
+
+        if login_saved:
+            st.session_state[
+                "message"
+            ] = (
+                "アカウントを作成しました ☕"
+            )
+
+            st.rerun()
+
+        # アカウント自体は作成済み
+        st.success(
+            "アカウントは"
+            "作成されています。"
+        )
+
+        st.info(
+            "「ログイン」に切り替えて、"
+            "作成したメールアドレスと"
+            "パスワードでログインしてください。"
+        )
+
+        return
+
+    # メール確認が有効の場合
+    st.success(
+        "アカウントを作成しました。"
+    )
+
+    st.info(
+        "確認メールが届いた場合は、"
+        "メール内のリンクを開いてから"
+        "ログインしてください ☕"
+    )
 
 
 # =====================================
