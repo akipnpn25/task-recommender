@@ -523,6 +523,44 @@ with st.container(
     color:
         #766B63;
 }
+/* =====================================
+   集中モード カウントダウン
+===================================== */
+
+.focus-countdown {
+    font-size: 64px;
+    font-weight: 750;
+
+    letter-spacing: 0.05em;
+
+    color: #3F352E;
+
+    line-height: 1.2;
+
+    margin-top: 12px;
+    margin-bottom: 14px;
+}
+
+.focus-finished {
+    font-size: 34px;
+    font-weight: 750;
+
+    color: #56634E;
+
+    margin-top: 18px;
+    margin-bottom: 14px;
+}
+
+@media (max-width: 700px) {
+
+    .focus-countdown {
+        font-size: 48px;
+    }
+
+    .focus-finished {
+        font-size: 28px;
+    }
+}
 
     </style>
     """,

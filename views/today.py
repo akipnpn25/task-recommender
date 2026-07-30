@@ -16,6 +16,24 @@ from components import (
     get_recommendation_status,
     render_progress_popover,
 )
+# =====================================
+# 集中モードの状態を削除
+# =====================================
+
+def clear_focus_state():
+    keys = [
+        "focus_mode",
+        "focus_task_id",
+        "focus_task_title",
+        "focus_started_at",
+        "focus_minutes",
+    ]
+
+    for key in keys:
+        st.session_state.pop(
+            key,
+            None,
+        )
 
 
 # =====================================
@@ -39,17 +57,13 @@ def render_focus_mode():
         30,
     )
 
+    # 開始時刻がなければ通常画面へ戻す
     if started_at_text is None:
-        st.session_state[
-            "focus_mode"
-        ] = False
-
+        clear_focus_state()
         st.rerun()
 
-    started_at = (
-        datetime.fromisoformat(
-            started_at_text
-        )
+    started_at = datetime.fromisoformat(
+        started_at_text
     )
 
     finish_at = (
@@ -59,76 +73,216 @@ def render_focus_mode():
         )
     )
 
-    # -------------------------
-    # 戻る
-    # -------------------------
-
-    if st.button(
-        "← おすすめ画面に戻る",
-        key="back_from_focus",
-    ):
-        st.session_state[
-            "focus_mode"
-        ] = False
-
-        st.rerun()
-
-    st.write("")
-
-    # -------------------------
-    # 集中画面
-    # -------------------------
+    # =====================================
+    # 上部
+    # =====================================
 
     st.markdown(
         (
-            '<div class="focus-screen">'
-            '<div class="focus-screen-label">'
-            '☕ FOCUS TIME'
-            '</div>'
-            '<div class="focus-screen-title">'
-            f'{task_title}'
-            '</div>'
-            '<div class="focus-screen-time">'
-            f'{started_at.strftime("%H:%M")}'
-            '　→　'
-            f'{finish_at.strftime("%H:%M")}'
-            '</div>'
-            '<div class="focus-screen-duration">'
-            f'{format_minutes(focus_minutes)} 集中'
-            '</div>'
-            '<div class="focus-screen-message">'
-            '今はこの課題だけに集中。'
-            '</div>'
+            '<div class="section-kicker">'
+            'FOCUS MODE'
             '</div>'
         ),
         unsafe_allow_html=True,
     )
 
+    st.caption(
+        "今はこの課題だけに集中しよう。"
+    )
+
     st.write("")
 
-    # -------------------------
-    # 集中終了
-    # -------------------------
+    # =====================================
+    # 1秒ごとに更新するタイマー
+    # =====================================
 
-    if st.button(
-        "✓ 集中を終える",
-        key="finish_focus",
-        use_container_width=True,
-        type="primary",
-    ):
-        st.session_state[
-            "focus_mode"
-        ] = False
+    @st.fragment(
+        run_every=1
+    )
+    def render_countdown():
 
-        st.session_state[
-            "message"
-        ] = (
-            "おつかれさま ☕ "
-            "どのくらい進んだか更新してみよう。"
+        now = datetime.now()
+
+        remaining_seconds = int(
+            (
+                finish_at
+                - now
+            ).total_seconds()
         )
 
-        st.rerun()
+        total_seconds = (
+            focus_minutes
+            * 60
+        )
 
+        # =================================
+        # 時間終了
+        # =================================
+
+        if remaining_seconds <= 0:
+
+            st.markdown(
+                (
+                    '<div class="focus-screen">'
+                    '<div class="focus-screen-label">'
+                    '☕ FOCUS TIME'
+                    '</div>'
+                    '<div class="focus-screen-title">'
+                    f'{task_title}'
+                    '</div>'
+                    '<div class="focus-finished">'
+                    'おつかれさま！'
+                    '</div>'
+                    '<div class="focus-screen-message">'
+                    '集中時間が終了しました。'
+                    '</div>'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+            st.progress(
+                1.0
+            )
+
+            st.success(
+                "☕ 集中時間終了！"
+                "どのくらい進んだか確認してみよう。"
+            )
+
+            if st.button(
+                "✓ 集中を終えて進捗を更新",
+                key="finish_focus_time",
+                use_container_width=True,
+                type="primary",
+            ):
+
+                clear_focus_state()
+
+                st.session_state[
+                    "message"
+                ] = (
+                    "おつかれさま ☕ "
+                    "進捗を更新してみよう。"
+                )
+
+                st.rerun()
+
+            return
+
+        # =================================
+        # 残り時間
+        # =================================
+
+        remaining_minutes = (
+            remaining_seconds
+            // 60
+        )
+
+        remaining_sec = (
+            remaining_seconds
+            % 60
+        )
+
+        timer_text = (
+            f"{remaining_minutes:02d}:"
+            f"{remaining_sec:02d}"
+        )
+
+        # =================================
+        # 進捗率
+        # =================================
+
+        elapsed_seconds = (
+            total_seconds
+            - remaining_seconds
+        )
+
+        progress = (
+            elapsed_seconds
+            / total_seconds
+        )
+
+        progress = max(
+            0.0,
+            min(
+                1.0,
+                progress,
+            ),
+        )
+
+        # =================================
+        # 集中カード
+        # =================================
+
+        st.markdown(
+            (
+                '<div class="focus-screen">'
+                '<div class="focus-screen-label">'
+                '☕ FOCUS TIME'
+                '</div>'
+                '<div class="focus-screen-title">'
+                f'{task_title}'
+                '</div>'
+                '<div class="focus-countdown">'
+                f'{timer_text}'
+                '</div>'
+                '<div class="focus-screen-duration">'
+                f'{format_minutes(focus_minutes)} 集中'
+                '</div>'
+                '<div class="focus-screen-message">'
+                f'{started_at.strftime("%H:%M")}'
+                ' 〜 '
+                f'{finish_at.strftime("%H:%M")}'
+                '</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+        st.progress(
+            progress
+        )
+
+        st.caption(
+            "☕ 焦らず、この課題だけに集中。"
+        )
+
+        st.write("")
+
+        # =================================
+        # 途中で終了
+        # =================================
+
+        if st.button(
+            "✓ ここで集中を終える",
+            key="finish_focus_early",
+            use_container_width=True,
+            type="primary",
+        ):
+
+            clear_focus_state()
+
+            st.session_state[
+                "message"
+            ] = (
+                "おつかれさま ☕ "
+                "どのくらい進んだか更新してみよう。"
+            )
+
+            st.rerun()
+
+        if st.button(
+            "中断しておすすめ画面に戻る",
+            key="cancel_focus",
+            use_container_width=True,
+        ):
+
+            clear_focus_state()
+
+            st.rerun()
+
+    render_countdown()
 
 # =====================================
 # 今週の課題全体の見通し
