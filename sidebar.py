@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import datetime, timedelta
+from auth import logout
 
 from components import format_minutes
 
@@ -37,10 +38,31 @@ def render_sidebar(
     weekly_available_minutes = {}
 
     with st.sidebar:
+    # =====================================
+    # ログイン情報
+    # =====================================
 
-        # =====================================
-        # サイドバー上部
-        # =====================================
+        user_email = st.session_state.get(
+        "user_email",
+        "",
+    )
+        if user_email:
+            st.caption(
+            f"👤 {user_email}"
+        )
+            if st.button(
+        "ログアウト",
+        use_container_width=True,
+        key="logout_button",
+    ):
+                logout()
+                st.rerun()
+                st.divider()
+
+
+    # =====================================
+    # アプリ情報
+    # =====================================
 
         st.markdown(
             "## ☕ 今やる課題推薦"

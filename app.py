@@ -6,6 +6,11 @@ from db import (
     get_weekly_settings,
     get_date_overrides,
 )
+from auth import (
+    is_logged_in,
+    render_auth_page,
+    logout,
+)
 
 from sidebar import render_sidebar
 
@@ -680,6 +685,13 @@ with st.container(
     """,
     unsafe_allow_html=True,
 )
+# =====================================
+# ログイン確認
+# =====================================
+
+if not is_logged_in():
+    render_auth_page()
+    st.stop()
 
 # =====================================
 # 初期化

@@ -1,3 +1,4 @@
 streamlit
 pandas
-pytest
+pytestsupabase==2.31.0
+supabase==2.31.0
