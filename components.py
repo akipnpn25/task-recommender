@@ -190,3 +190,52 @@ def render_progress_popover(
             ] = title
 
             st.rerun()
+            
+# =====================================
+# 今使える時間
+# =====================================
+
+AVAILABLE_TIME_OPTIONS = {
+    "15分": 15,
+    "30分": 30,
+    "45分": 45,
+    "1時間": 60,
+    "1時間30分": 90,
+    "2時間": 120,
+    "3時間": 180,
+}
+
+
+def render_available_time_selector(
+    key,
+):
+    labels = list(
+        AVAILABLE_TIME_OPTIONS.keys()
+    )
+
+    saved_label = st.session_state.get(
+        "selected_available_label",
+        "1時間",
+    )
+
+    if saved_label not in labels:
+        saved_label = "1時間"
+
+    selected_label = st.radio(
+        "今使える時間",
+        labels,
+        index=labels.index(
+            saved_label
+        ),
+        horizontal=True,
+        key=key,
+        label_visibility="collapsed",
+    )
+
+    st.session_state[
+        "selected_available_label"
+    ] = selected_label
+
+    return AVAILABLE_TIME_OPTIONS[
+        selected_label
+    ]

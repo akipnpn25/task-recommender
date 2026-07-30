@@ -12,6 +12,7 @@ from sidebar import render_sidebar
 from views.today import render_today
 from views.tasks import render_tasks
 from views.add_task import render_add_task
+from views.outlook import render_outlook
 
 
 # =====================================
@@ -726,6 +727,7 @@ page = st.segmented_control(
     "ページ",
     options=[
         "☕ 今日",
+        "📅 見通し",
         "📚 課題一覧",
         "＋ 課題を追加",
     ],
@@ -740,18 +742,27 @@ page = st.segmented_control(
 # =====================================
 
 if page == "☕ 今日":
+
     render_today(
         tasks,
         weekly_available_minutes,
         date_overrides,
     )
 
+elif page == "📅 見通し":
+
+    render_outlook(
+        tasks,
+        weekly_available_minutes,
+        date_overrides,
+    )
 
 elif page == "📚 課題一覧":
+
     render_tasks(
         tasks
     )
 
-
 elif page == "＋ 課題を追加":
+
     render_add_task()
