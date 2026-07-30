@@ -132,58 +132,80 @@ def render_progress_popover(
     progress,
     key_prefix,
 ):
-    progress_options = {
-        "1割": 10,
-        "2割": 20,
-        "3割": 30,
-        "4割": 40,
-        "5割": 50,
-        "6割": 60,
-        "7割": 70,
-        "8割": 80,
-        "9割": 90,
-    }
-
     with st.popover(
         "📈 進捗を更新",
         use_container_width=True,
     ):
-        selected_label = st.segmented_control(
-            "どのくらい進みましたか？",
-            options=list(
-                progress_options.keys()
-            ),
-            selection_mode="single",
-            key=(
-                f"{key_prefix}_"
-                f"progress_{task_id}"
-            ),
+        st.caption(
+            f"現在の進捗：{progress}%"
         )
 
-        if selected_label is not None:
-            new_progress = progress_options[
-                selected_label
-            ]
+        options = (
+            get_forward_progress_options(
+                progress
+            )
+        )
 
-            if new_progress != progress:
+        selected = (
+            st.segmented_control(
+                "どこまで進みましたか？",
+                options=list(
+                    options.keys()
+                ),
+                selection_mode="single",
+                key=(
+                    f"{key_prefix}_progress_"
+                    f"{task_id}"
+                ),
+            )
+        )
+
+        if (
+            selected is not None
+            and selected != "変わらない"
+        ):
+            new_progress = (
+                options[
+                    selected
+                ]
+            )
+
+            if st.button(
+                "進捗を保存",
+                key=(
+                    f"{key_prefix}_save_"
+                    f"{task_id}"
+                ),
+                use_container_width=True,
+                type="primary",
+            ):
                 update_progress(
                     task_id,
                     new_progress,
                 )
 
-                st.session_state["message"] = (
+                st.session_state[
+                    "message"
+                ] = (
                     f"「{title}」の進捗を"
-                    f"{selected_label}に更新しました。"
+                    f"{new_progress}%に更新しました。"
                 )
 
                 st.rerun()
 
+        st.divider()
+
         if st.button(
-            "✓ 終わった！",
-            key=f"{key_prefix}_finish_{task_id}",
+            "✓ 完了した",
+            key=(
+                f"{key_prefix}_finish_"
+                f"{task_id}"
+            ),
             use_container_width=True,
         ):
-            complete_task(task_id)
+            complete_task(
+                task_id
+            )
 
             st.session_state[
                 "celebrate_task"
@@ -239,3 +261,79 @@ def render_available_time_selector(
     return AVAILABLE_TIME_OPTIONS[
         selected_label
     ]
+# =====================================
+# 締切を分かりやすく表示
+# =====================================
+
+def format_deadline_friendly(
+    deadline,
+):
+    deadline_dt = (
+        datetime.fromisoformat(
+            deadline
+        )
+    )
+
+    now = datetime.now()
+
+    if deadline_dt <= now:
+        return (
+            "🚨 締切超過"
+        )
+
+    day_difference = (
+        deadline_dt.date()
+        - now.date()
+    ).days
+
+    time_text = (
+        deadline_dt.strftime(
+            "%H:%M"
+        )
+    )
+
+    if day_difference == 0:
+        return (
+            f"今日 {time_text}"
+        )
+
+    if day_difference == 1:
+        return (
+            f"明日 {time_text}"
+        )
+
+    if day_difference <= 6:
+        return (
+            f"あと{day_difference}日"
+            f"・{deadline_dt.strftime('%m/%d')}"
+        )
+
+    return (
+        deadline_dt.strftime(
+            "%m/%d %H:%M"
+        )
+    )
+
+
+# =====================================
+# 現在より先の進捗だけ表示
+# =====================================
+
+def get_forward_progress_options(
+    current_progress,
+):
+    options = {
+        "変わらない": current_progress,
+    }
+
+    for progress in range(
+        10,
+        100,
+        10,
+    ):
+        if progress > current_progress:
+            options[
+                f"{progress}%"
+            ] = progress
+
+    return options

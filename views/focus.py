@@ -9,8 +9,8 @@ from db import (
 
 from components import (
     format_minutes,
+    get_forward_progress_options,
 )
-
 
 # =====================================
 # 集中状態を削除
@@ -476,20 +476,14 @@ def render_focus_result(
     )
 
     st.caption(
-        f"集中前の進捗：{current_progress}%"
+        f"集中前は {current_progress}% でした。"
     )
 
-    progress_options = {
-        "1割": 10,
-        "2割": 20,
-        "3割": 30,
-        "4割": 40,
-        "5割": 50,
-        "6割": 60,
-        "7割": 70,
-        "8割": 80,
-        "9割": 90,
-    }
+    progress_options = (
+        get_forward_progress_options(
+            current_progress
+        )
+    )
 
     selected_label = (
         st.segmented_control(
@@ -506,7 +500,10 @@ def render_focus_result(
 
     st.write("")
 
-    if selected_label is not None:
+    if (
+        selected_label is not None
+        and selected_label != "変わらない"
+    ):
         new_progress = (
             progress_options[
                 selected_label
@@ -514,7 +511,7 @@ def render_focus_result(
         )
 
         if st.button(
-            "進捗を保存しておすすめを見る",
+            "保存しておすすめを見る",
             key="save_focus_result",
             use_container_width=True,
             type="primary",
@@ -529,10 +526,23 @@ def render_focus_result(
             st.session_state[
                 "message"
             ] = (
-                f"「{task_title}」の進捗を"
-                f"{selected_label}に更新しました ☕"
+                f"「{task_title}」を"
+                f"{new_progress}%に更新しました ☕"
             )
 
+            st.rerun()
+
+    elif (
+        selected_label
+        == "変わらない"
+    ):
+        if st.button(
+            "そのままおすすめを見る",
+            key="keep_focus_result",
+            use_container_width=True,
+            type="primary",
+        ):
+            clear_focus_result_state()
             st.rerun()
 
     if st.button(
