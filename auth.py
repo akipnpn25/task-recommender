@@ -20,6 +20,7 @@ COOKIE_REMOVER_KEY = "task_recommender_cookie_remover"
 
 AUTH_CLIENT_KEY = "_authenticated_supabase_client"
 AUTH_COOKIE_PENDING_KEY = "_auth_cookie_pending"
+AUTH_COOKIE_LAST_WRITTEN_KEY = "_auth_cookie_last_written"
 AUTH_IGNORE_CONTEXT_COOKIE_KEY = "_auth_ignore_context_cookie"
 
 
@@ -140,16 +141,20 @@ def write_refresh_cookie(
     if not refresh_token:
         return False
 
-    # CookieControllerは初回生成時にgetAllを描画する。
-    # 同じ実行でsetも呼ぶとキーが競合するため、
-    # 初回だけ次のrerunへ持ち越す。
-    if not writer_ready:
-        st.session_state[
-            AUTH_COOKIE_PENDING_KEY
-        ] = refresh_token
-        return False
+    # 同じStreamlitセッション内で、同一Tokenを
+    # 何度も書き込まない。
+    if (
+        st.session_state.get(
+            AUTH_COOKIE_LAST_WRITTEN_KEY
+        )
+        == refresh_token
+    ):
+        return True
 
     try:
+        # CookieControllerの初回生成時はgetAllが描画されるが、
+        # set()は別のコンポーネント呼び出しなので、
+        # 初回でもここで直接保存する。
         writer.set(
             AUTH_COOKIE_NAME,
             refresh_token,
@@ -163,17 +168,31 @@ def write_refresh_cookie(
             same_site="lax",
         )
 
+        st.session_state[
+            AUTH_COOKIE_LAST_WRITTEN_KEY
+        ] = refresh_token
+
         st.session_state.pop(
             AUTH_COOKIE_PENDING_KEY,
             None,
         )
 
+        print(
+            "[auth] ログイン維持Cookieの保存処理を実行しました。"
+        )
+
         return True
 
     except Exception as error:
+        # 次のrerunでも再試行できるように保持する。
         st.session_state[
             AUTH_COOKIE_PENDING_KEY
         ] = refresh_token
+
+        st.session_state.pop(
+            AUTH_COOKIE_LAST_WRITTEN_KEY,
+            None,
+        )
 
         print(
             "[auth] Cookie保存エラー:",
@@ -209,9 +228,6 @@ def remove_refresh_cookie(
 ):
     """ログイン維持用Cookieを削除する。"""
 
-    if not remover_ready:
-        return False
-
     try:
         remover.remove(
             AUTH_COOKIE_NAME,
@@ -219,6 +235,12 @@ def remove_refresh_cookie(
             secure=use_secure_cookie(),
             same_site="lax",
         )
+
+        st.session_state.pop(
+            AUTH_COOKIE_LAST_WRITTEN_KEY,
+            None,
+        )
+
         return True
 
     except Exception as error:
@@ -347,6 +369,7 @@ def clear_auth_session():
         "user_email",
         AUTH_CLIENT_KEY,
         AUTH_COOKIE_PENDING_KEY,
+        AUTH_COOKIE_LAST_WRITTEN_KEY,
     ):
         st.session_state.pop(
             key,
@@ -417,7 +440,8 @@ def restore_auth_session():
             clear_auth_session()
             return False
 
-        # refresh_session()で更新されたTokenを保存する。
+        # refresh_session()ではRefresh Tokenが更新されるため、
+        # 新しいTokenをこの実行中に必ずCookieへ保存する。
         sync_refresh_cookie(
             controllers["writer"],
             controllers["writer_ready"],
